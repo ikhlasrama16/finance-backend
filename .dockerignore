@@ -1,0 +1,10 @@
+.git
+.env
+.env.*
+tmp
+bin
+.idea
+.vscode
+*.log
+Dockerfile
+README.md
