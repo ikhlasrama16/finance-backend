@@ -139,13 +139,15 @@ func (s *Service) resolve(ctx context.Context, raw Notification, result *parser.
 	}
 
 	if result.Type == "income" || result.Type == "expense" {
+		accountName := result.SourceAccountName
 		if result.Type == "income" {
+			accountName = result.DestinationAccountName
 			input.DestinationAccountID = accountID(ctx, s.accountRepository, result.DestinationAccountName)
 		} else {
 			input.SourceAccountID = accountID(ctx, s.accountRepository, result.SourceAccountName)
 		}
 		if (result.Type == "income" && input.DestinationAccountID == nil) || (result.Type == "expense" && input.SourceAccountID == nil) {
-			return transaction.CreateParsedInput{}, errors.New("required account not found")
+			return transaction.CreateParsedInput{}, fmt.Errorf("account not found: %s", strings.TrimSpace(accountName))
 		}
 		var cat category.Category
 		var err error
@@ -155,7 +157,7 @@ func (s *Service) resolve(ctx context.Context, raw Notification, result *parser.
 			cat, err = s.categoryRepository.GetByNameAndType(ctx, result.CategoryName, result.Type)
 		}
 		if err != nil {
-			return transaction.CreateParsedInput{}, errors.New("required category not found")
+			return transaction.CreateParsedInput{}, fmt.Errorf("category not found: %s (%s)", strings.TrimSpace(result.CategoryName), result.Type)
 		}
 		if cat.Type != result.Type {
 			return transaction.CreateParsedInput{}, errors.New("category type does not match transaction type")
@@ -165,7 +167,7 @@ func (s *Service) resolve(ctx context.Context, raw Notification, result *parser.
 		input.SourceAccountID = accountID(ctx, s.accountRepository, result.SourceAccountName)
 		input.DestinationAccountID = accountID(ctx, s.accountRepository, result.DestinationAccountName)
 		if input.SourceAccountID == nil || input.DestinationAccountID == nil {
-			return transaction.CreateParsedInput{}, errors.New("required account not found")
+			return transaction.CreateParsedInput{}, fmt.Errorf("transfer account not found: %s -> %s", strings.TrimSpace(result.SourceAccountName), strings.TrimSpace(result.DestinationAccountName))
 		}
 		if *input.SourceAccountID == *input.DestinationAccountID {
 			return transaction.CreateParsedInput{}, errors.New("source and destination account cannot be the same")

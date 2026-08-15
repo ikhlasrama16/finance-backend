@@ -125,12 +125,37 @@ func TestResolveParsedNotificationCases(t *testing.T) {
 	}
 }
 
+func TestResolveQRISWithRequiredReferences(t *testing.T) {
+	seaBank := account.Account{ID: 10, Name: "SeaBank"}
+	uncategorized := category.Category{ID: 21, Name: "Belum Dikategorikan", Type: "expense"}
+	service := &Service{
+		accountRepository:  fakeAccountResolver{accounts: map[string]account.Account{"SeaBank": seaBank}},
+		categoryRepository: fakeCategoryResolver{categories: map[string]category.Category{"Belum Dikategorikan/expense": uncategorized}},
+	}
+	parsed, err := parser.Parse(parser.Input{
+		SourceApp: "SeaBank",
+		Title:     "Pembayaran QRIS Berhasil",
+		Text:      "Pembayaran QRIS untuk WARUNG TEST sebesar Rp10000 berhasil",
+	})
+	if err != nil || parsed == nil {
+		t.Fatalf("parse QRIS: result=%#v err=%v", parsed, err)
+	}
+
+	got, err := service.resolve(context.Background(), Notification{ID: 5, ReceivedAt: mustTime("2026-08-15T05:19:58Z")}, parsed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Type != "expense" || got.Amount != 10000 || got.SourceAccountID == nil || *got.SourceAccountID != seaBank.ID || got.DestinationAccountID != nil || got.CategoryID == nil || *got.CategoryID != uncategorized.ID || got.Merchant == nil || *got.Merchant != "WARUNG TEST" || got.ParseStatus != "AUTO" || got.Confidence != .99 || got.RawNotificationID != 5 {
+		t.Fatalf("unexpected parsed transaction input: %#v", got)
+	}
+}
+
 func TestResolveFailsWithoutRequiredAccountOrCategory(t *testing.T) {
 	service := &Service{accountRepository: fakeAccountResolver{accounts: map[string]account.Account{}}, categoryRepository: fakeCategoryResolver{categories: map[string]category.Category{}}}
 	raw := Notification{ID: 1, ReceivedAt: mustTime("2026-08-14T10:00:00Z")}
 	_, err := service.resolve(context.Background(), raw, &parser.Result{Type: "expense", Amount: 1000, SourceAccountName: "SeaBank", CategoryName: "Belum Dikategorikan"})
-	if err == nil {
-		t.Fatal("expected missing account error")
+	if err == nil || err.Error() != "account not found: SeaBank" {
+		t.Fatalf("got %v, want account not found diagnostic", err)
 	}
 }
 
