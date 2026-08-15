@@ -91,6 +91,11 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 	)
 
 	mux.HandleFunc(
+		"POST /api/v1/accounts/{id}/reconcile",
+		accountHandler.Reconcile,
+	)
+
+	mux.HandleFunc(
 		"GET /api/v1/transactions",
 		transactionHandler.List,
 	)

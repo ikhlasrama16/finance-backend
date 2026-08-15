@@ -25,7 +25,7 @@ func accountFromSource(source string) string {
 }
 
 func detectOwnedAccount(value string) string {
-	for _, name := range []string{"ShopeePay", "SeaBank", "Bank Jago", "Mandiri", "BRI"} {
+	for _, name := range []string{"ShopeePay", "SeaBank", "Bank Jago", "Mandiri", "BRI", "Flip"} {
 		pattern := `(?i)(^|[^a-z])` + regexp.QuoteMeta(name) + `([^a-z]|$)`
 		if regexp.MustCompile(pattern).MatchString(value) {
 			return name
@@ -36,7 +36,7 @@ func detectOwnedAccount(value string) string {
 
 func isOwnedAccount(name string) bool {
 	switch name {
-	case "SeaBank", "ShopeePay", "Bank Jago", "Mandiri", "BRI":
+	case "SeaBank", "ShopeePay", "Bank Jago", "Mandiri", "BRI", "Flip":
 		return true
 	}
 	return false

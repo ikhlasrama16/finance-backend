@@ -17,5 +17,8 @@ func (shopeePayParser) Parse(input Input) (*Result, error) {
 	if amount == 0 {
 		return nil, nil
 	}
-	return &Result{Type: "transfer", Amount: amount, DestinationAccountName: "ShopeePay", ParseStatus: "AUTO", Confidence: 0.99}, nil
+	// This notification confirms an incoming top-up but does not identify the
+	// source account. It must not become a source-less or self transfer. The
+	// corresponding source-account notification is authoritative when present.
+	return &Result{Ignore: true, ParseStatus: "IGNORED_SUPPORTING_NOTIFICATION", Confidence: 0.99}, nil
 }

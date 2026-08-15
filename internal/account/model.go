@@ -20,3 +20,17 @@ type CreateInput struct {
 	Type           string  `json:"type"`
 	OpeningBalance int64   `json:"opening_balance"`
 }
+
+type ReconcileInput struct {
+	AccountID     int64
+	ActualBalance int64
+	Description   string
+}
+
+type Reconciliation struct {
+	AccountID       int64  `json:"account_id"`
+	PreviousBalance int64  `json:"previous_balance"`
+	ActualBalance   int64  `json:"actual_balance"`
+	Difference      int64  `json:"difference"`
+	TransactionID   *int64 `json:"transaction_id"`
+}

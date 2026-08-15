@@ -54,7 +54,7 @@ func TestAccountMappingAndDetection(t *testing.T) {
 			t.Errorf("%s: got %s, want %s", source, got, want)
 		}
 	}
-	for text, want := range map[string]string{"transfer ke Bank Jago": "Bank Jago", "dari ShopeePay": "ShopeePay", "dari BRI": "BRI", "ke SeaBank": "SeaBank"} {
+	for text, want := range map[string]string{"transfer ke Bank Jago": "Bank Jago", "dari ShopeePay": "ShopeePay", "dari BRI": "BRI", "ke SeaBank": "SeaBank", "top up Flip": "Flip"} {
 		if got := detectOwnedAccount(text); got != want {
 			t.Errorf("%s: got %s, want %s", text, got, want)
 		}
@@ -98,9 +98,23 @@ func TestSeaBankCases(t *testing.T) {
 	}
 }
 
-func TestShopeePayTopUpDoesNotInventSource(t *testing.T) {
+func TestSeaBankVirtualAccountTransferToShopeePay(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "SeaBank",
+		Title:     "Pembayaran Berhasil",
+		Text:      "Kamu telah melakukan transfer virtual account sebesar Rp10.000 kepada ShopeePay pada 16 Agu 2026 01:13 WIB",
+	})
+	if err != nil || got == nil {
+		t.Fatalf("got %#v, err %v", got, err)
+	}
+	if got.Type != "transfer" || got.Amount != 10000 || got.SourceAccountName != "SeaBank" || got.DestinationAccountName != "ShopeePay" || got.CategoryName != "" {
+		t.Fatalf("unexpected result %#v", got)
+	}
+}
+
+func TestShopeePayTopUpIsIgnoredWhenSourceIsUnknown(t *testing.T) {
 	got, err := Parse(Input{SourceApp: "ShopeePay", Title: "Isi Saldo Berhasil", Text: "Pengisian saldo sebesar Rp10.000 telah ditambahkan ke ShopeePay-mu. Saldo saat ini sebesar Rp10.050."})
-	if err != nil || got == nil || got.Type != "transfer" || got.Amount != 10000 || got.SourceAccountName != "" || got.DestinationAccountName != "ShopeePay" {
+	if err != nil || got == nil || !got.Ignore || got.Type != "" || got.SourceAccountName != "" || got.DestinationAccountName != "" {
 		t.Fatalf("unexpected result %#v, err %v", got, err)
 	}
 }
