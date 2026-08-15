@@ -4,7 +4,7 @@ import "regexp"
 
 type seaBankParser struct{}
 
-var seaAmountRE = regexp.MustCompile(`(?i)sebesar\s*rp\s*([\d.,]+)`)
+var seaAmountRE = regexp.MustCompile(`(?i)(?:sebesar|senilai)\s*rp\s*([\d.,]+)`)
 var incomingFromRE = regexp.MustCompile(`(?i)dari\s+(.+?)\s+pada\s+`)
 var paymentToRE = regexp.MustCompile(`(?i)kepada\s+(.+?)\s+pada\s+`)
 
@@ -26,6 +26,17 @@ func (seaBankParser) Parse(input Input) (*Result, error) {
 			return &Result{Type: "transfer", Amount: amount, SourceAccountName: owned, DestinationAccountName: "SeaBank", ParseStatus: "AUTO", Confidence: 0.97}, nil
 		}
 		return &Result{Type: "income", Amount: amount, DestinationAccountName: "SeaBank", Merchant: source, CategoryName: "Pemasukan", ParseStatus: "AUTO", Confidence: 0.82}, nil
+	}
+	if containsAny(normalized, "realtime transfer") {
+		amount := amountFromRegex(text, seaAmountRE)
+		merchant := capture(paymentToRE, text)
+		if amount == 0 {
+			return nil, nil
+		}
+		if owned := detectOwnedAccount(merchant); owned != "" {
+			return &Result{Type: "transfer", Amount: amount, SourceAccountName: "SeaBank", DestinationAccountName: owned, ParseStatus: "AUTO", Confidence: 0.98}, nil
+		}
+		return &Result{Type: "expense", Amount: amount, SourceAccountName: "SeaBank", Merchant: merchant, CategoryName: "Belum Dikategorikan", ParseStatus: "AUTO", Confidence: 0.90}, nil
 	}
 	if containsAny(normalized, "pembayaran berhasil") {
 		amount := amountFromRegex(text, seaAmountRE)

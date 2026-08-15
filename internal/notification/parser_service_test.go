@@ -159,4 +159,32 @@ func TestResolveFailsWithoutRequiredAccountOrCategory(t *testing.T) {
 	}
 }
 
+func TestResolveExpenseDefaultsMissingCategory(t *testing.T) {
+	seaBank := account.Account{ID: 10, Name: "SeaBank"}
+	uncategorized := category.Category{ID: 21, Name: "Belum Dikategorikan", Type: "expense"}
+	service := &Service{
+		accountRepository:  fakeAccountResolver{accounts: map[string]account.Account{"SeaBank": seaBank}},
+		categoryRepository: fakeCategoryResolver{categories: map[string]category.Category{"Belum Dikategorikan/expense": uncategorized}},
+	}
+	got, err := service.resolve(context.Background(), Notification{ID: 1, ReceivedAt: mustTime("2026-08-15T12:00:00Z")}, &parser.Result{Type: "expense", Amount: 26000, SourceAccountName: "SeaBank"})
+	if err != nil || got.CategoryID == nil || *got.CategoryID != uncategorized.ID {
+		t.Fatalf("unexpected result %#v, err %v", got, err)
+	}
+}
+
+func TestResolveShopeePayTopUpReportsUnknownSource(t *testing.T) {
+	service := &Service{
+		accountRepository:  fakeAccountResolver{accounts: map[string]account.Account{"ShopeePay": {ID: 11, Name: "ShopeePay"}}},
+		categoryRepository: fakeCategoryResolver{categories: map[string]category.Category{}},
+	}
+	parsed, err := parser.Parse(parser.Input{SourceApp: "ShopeePay", Title: "Isi Saldo Berhasil", Text: "Pengisian saldo sebesar Rp10.000 telah ditambahkan ke ShopeePay-mu."})
+	if err != nil || parsed == nil {
+		t.Fatalf("parse: %#v, %v", parsed, err)
+	}
+	_, err = service.resolve(context.Background(), Notification{ID: 1, ReceivedAt: mustTime("2026-08-15T12:00:00Z")}, parsed)
+	if err == nil || err.Error() != "transfer source account could not be determined" {
+		t.Fatalf("got %v, want controlled unresolved-source error", err)
+	}
+}
+
 func mustTime(value string) (result time.Time) { result, _ = time.Parse(time.RFC3339, value); return }

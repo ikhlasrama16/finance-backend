@@ -17,5 +17,5 @@ func (shopeePayParser) Parse(input Input) (*Result, error) {
 	if amount == 0 {
 		return nil, nil
 	}
-	return &Result{Type: "transfer", Amount: amount, SourceAccountName: detectOwnedAccount(combinedText(input)), DestinationAccountName: "ShopeePay", ParseStatus: "AUTO", Confidence: 0.99}, nil
+	return &Result{Type: "transfer", Amount: amount, DestinationAccountName: "ShopeePay", ParseStatus: "AUTO", Confidence: 0.99}, nil
 }

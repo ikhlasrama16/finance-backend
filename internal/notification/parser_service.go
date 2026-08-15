@@ -154,6 +154,9 @@ func (s *Service) resolve(ctx context.Context, raw Notification, result *parser.
 		if result.CategoryID != nil {
 			cat, err = s.categoryRepository.GetByID(ctx, *result.CategoryID)
 		} else {
+			if result.Type == "expense" && strings.TrimSpace(result.CategoryName) == "" {
+				result.CategoryName = "Belum Dikategorikan"
+			}
 			cat, err = s.categoryRepository.GetByNameAndType(ctx, result.CategoryName, result.Type)
 		}
 		if err != nil {
@@ -164,6 +167,12 @@ func (s *Service) resolve(ctx context.Context, raw Notification, result *parser.
 		}
 		input.CategoryID = &cat.ID
 	} else if result.Type == "transfer" {
+		if strings.TrimSpace(result.SourceAccountName) == "" {
+			return transaction.CreateParsedInput{}, errors.New("transfer source account could not be determined")
+		}
+		if strings.TrimSpace(result.DestinationAccountName) == "" {
+			return transaction.CreateParsedInput{}, errors.New("transfer destination account could not be determined")
+		}
 		input.SourceAccountID = accountID(ctx, s.accountRepository, result.SourceAccountName)
 		input.DestinationAccountID = accountID(ctx, s.accountRepository, result.DestinationAccountName)
 		if input.SourceAccountID == nil || input.DestinationAccountID == nil {

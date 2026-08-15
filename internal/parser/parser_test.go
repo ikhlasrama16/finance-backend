@@ -99,9 +99,36 @@ func TestSeaBankCases(t *testing.T) {
 }
 
 func TestShopeePayTopUpDoesNotInventSource(t *testing.T) {
-	got, err := Parse(Input{SourceApp: "ShopeePay", Title: "Isi Saldo Berhasil", Text: "Pengisian saldo sebesar Rp50.000 berhasil"})
-	if err != nil || got == nil || got.Type != "transfer" || got.Amount != 50000 || got.SourceAccountName != "" || got.DestinationAccountName != "ShopeePay" {
+	got, err := Parse(Input{SourceApp: "ShopeePay", Title: "Isi Saldo Berhasil", Text: "Pengisian saldo sebesar Rp10.000 telah ditambahkan ke ShopeePay-mu. Saldo saat ini sebesar Rp10.050."})
+	if err != nil || got == nil || got.Type != "transfer" || got.Amount != 10000 || got.SourceAccountName != "" || got.DestinationAccountName != "ShopeePay" {
 		t.Fatalf("unexpected result %#v, err %v", got, err)
+	}
+}
+
+func TestShopeeTopUpCompletionIsIgnored(t *testing.T) {
+	got, err := Parse(Input{SourceApp: "Shopee", Title: "Top-up Completed", Text: "Your Top up request of Rp10.000 is successful and your current balance is Rp10.050."})
+	if err != nil || got == nil || !got.Ignore {
+		t.Fatalf("unexpected result %#v, err %v", got, err)
+	}
+}
+
+func TestSeaBankRealtimeTransferClassifiesExternalAndOwnedRecipients(t *testing.T) {
+	tests := []struct {
+		name, text, typ, merchant, destination string
+	}{
+		{name: "external", text: "Kamu baru melakukan transfer senilai Rp26.000 kepada DHEVIA LEUYS THIAQUFYAN pada 15 Agu 2026 19:24 (WIB).", typ: "expense", merchant: "DHEVIA LEUYS THIAQUFYAN"},
+		{name: "owned", text: "Kamu baru melakukan transfer senilai Rp26.000 kepada ShopeePay pada 15 Agu 2026 19:24 (WIB).", typ: "transfer", destination: "ShopeePay"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Parse(Input{SourceApp: "SeaBank", Title: "Realtime Transfer", Text: tt.text})
+			if err != nil || got == nil || got.Type != tt.typ || got.Amount != 26000 || got.SourceAccountName != "SeaBank" || got.Merchant != tt.merchant || got.DestinationAccountName != tt.destination {
+				t.Fatalf("unexpected result %#v, err %v", got, err)
+			}
+			if tt.typ == "expense" && got.CategoryName != "Belum Dikategorikan" {
+				t.Fatalf("missing default category: %#v", got)
+			}
+		})
 	}
 }
 
