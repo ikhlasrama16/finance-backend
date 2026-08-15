@@ -12,6 +12,7 @@ import (
 	"finance-monitor/backend/internal/category"
 	"finance-monitor/backend/internal/rule"
 	"finance-monitor/backend/internal/transaction"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -79,17 +80,17 @@ func (s *Service) Create(
 
 	receivedAt := time.Now()
 
-if strings.TrimSpace(input.ReceivedAt) != "" {
-	parsedTime, err := time.Parse(
-		time.RFC3339,
-		input.ReceivedAt,
-	)
-	if err != nil {
-		return Notification{}, ErrInvalidReceivedAt
-	}
+	if strings.TrimSpace(input.ReceivedAt) != "" {
+		parsedTime, err := time.Parse(
+			time.RFC3339,
+			input.ReceivedAt,
+		)
+		if err != nil {
+			return Notification{}, ErrInvalidReceivedAt
+		}
 
-	receivedAt = parsedTime
-}
+		receivedAt = parsedTime
+	}
 
 	fingerprint := generateFingerprint(
 		input.SourceApp,
