@@ -77,13 +77,19 @@ func (s *Service) Create(
 		return Notification{}, ErrBodyRequired
 	}
 
-	receivedAt, err := time.Parse(
+	receivedAt := time.Now()
+
+if strings.TrimSpace(input.ReceivedAt) != "" {
+	parsedTime, err := time.Parse(
 		time.RFC3339,
 		input.ReceivedAt,
 	)
 	if err != nil {
 		return Notification{}, ErrInvalidReceivedAt
 	}
+
+	receivedAt = parsedTime
+}
 
 	fingerprint := generateFingerprint(
 		input.SourceApp,
