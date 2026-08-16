@@ -31,7 +31,10 @@ func main() {
 
 	log.Println("PostgreSQL connected")
 
-	srv := server.NewWithOptions(cfg.Port, db, server.Options{IngestAPIKey: cfg.IngestAPIKey, AppEnv: cfg.AppEnv, CORSAllowedOrigins: cfg.CORSAllowedOrigins})
+	srv := server.NewWithOptions(cfg.Port, db, server.Options{
+		IngestAPIKey: cfg.IngestAPIKey, AppEnv: cfg.AppEnv, CORSAllowedOrigins: cfg.CORSAllowedOrigins,
+		OpenRouterAPIKey: cfg.OpenRouterAPIKey, OpenRouterModel: cfg.OpenRouterModel,
+	})
 
 	log.Printf(
 		"Finance API running on http://localhost:%s",

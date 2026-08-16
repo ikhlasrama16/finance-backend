@@ -12,6 +12,8 @@ type Config struct {
 	IngestAPIKey       string
 	AppEnv             string
 	CORSAllowedOrigins []string
+	OpenRouterAPIKey   string
+	OpenRouterModel    string
 }
 
 func Load() Config {
@@ -22,6 +24,10 @@ func Load() Config {
 	env := os.Getenv("APP_ENV")
 	if env == "" {
 		env = "development"
+	}
+	openRouterModel := os.Getenv("OPENROUTER_MODEL")
+	if openRouterModel == "" {
+		openRouterModel = "openrouter/free"
 	}
 	var origins []string
 	for _, origin := range strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), ",") {
@@ -36,6 +42,8 @@ func Load() Config {
 		IngestAPIKey:       os.Getenv("INGEST_API_KEY"),
 		AppEnv:             env,
 		CORSAllowedOrigins: origins,
+		OpenRouterAPIKey:   os.Getenv("OPENROUTER_API_KEY"),
+		OpenRouterModel:    openRouterModel,
 	}
 }
 

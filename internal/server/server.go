@@ -10,6 +10,7 @@ import (
 	"finance-monitor/backend/internal/category"
 	"finance-monitor/backend/internal/middleware"
 	"finance-monitor/backend/internal/notification"
+	"finance-monitor/backend/internal/report"
 	"finance-monitor/backend/internal/rule"
 	"finance-monitor/backend/internal/transaction"
 
@@ -25,6 +26,8 @@ type Options struct {
 	IngestAPIKey       string
 	AppEnv             string
 	CORSAllowedOrigins []string
+	OpenRouterAPIKey   string
+	OpenRouterModel    string
 }
 
 func New(
@@ -67,6 +70,10 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 	notificationHandler := notification.NewHandler(
 		notificationService,
 	)
+	reportRepository := report.NewRepository(db)
+	reportClient := report.NewOpenRouterClient(options.OpenRouterAPIKey, options.OpenRouterModel)
+	reportService := report.NewService(reportRepository, reportClient)
+	reportHandler := report.NewHandler(reportService)
 
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -114,6 +121,7 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 		"POST /api/v1/categories",
 		categoryHandler.Create,
 	)
+	mux.HandleFunc("POST /api/v1/reports/ai", reportHandler.Create)
 	var notificationRoute http.Handler = http.HandlerFunc(notificationHandler.Create)
 	notificationRoute = middleware.BearerAuth(options.IngestAPIKey)(notificationRoute)
 	mux.Handle("POST /api/v1/notifications", notificationRoute)
@@ -127,7 +135,7 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 			Handler:           handler,
 			ReadHeaderTimeout: 5 * time.Second,
 			ReadTimeout:       15 * time.Second,
-			WriteTimeout:      30 * time.Second,
+			WriteTimeout:      60 * time.Second,
 			IdleTimeout:       60 * time.Second,
 		},
 		db: db,

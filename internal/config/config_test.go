@@ -2,6 +2,13 @@ package config
 
 import "testing"
 
+func TestLoadDefaultsOpenRouterModel(t *testing.T) {
+	t.Setenv("OPENROUTER_MODEL", "")
+	if got := Load().OpenRouterModel; got != "openrouter/free" {
+		t.Fatalf("OpenRouterModel = %q", got)
+	}
+}
+
 func TestConfigValidate(t *testing.T) {
 	base := Config{DatabaseURL: "postgres://example", IngestAPIKey: "secret", AppEnv: "production"}
 	if err := base.Validate(); err != nil {
