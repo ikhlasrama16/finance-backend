@@ -111,6 +111,8 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 		"POST /api/v1/transactions",
 		transactionHandler.Create,
 	)
+	mux.HandleFunc("PATCH /api/v1/transactions/{id}", transactionHandler.Update)
+	mux.HandleFunc("DELETE /api/v1/transactions/{id}", transactionHandler.Delete)
 
 	mux.HandleFunc(
 		"GET /api/v1/categories",

@@ -30,6 +30,7 @@ CORS_ALLOWED_ORIGINS=https://app.example.com
    006_seed_legacy_master_data.sql
    007_seed_reconciliation_categories.sql
    008_create_ai_reports.sql
+   009_add_detached_raw_notification_status.sql
    ```
 
 3. Start the application with the same `DATABASE_URL`.
@@ -45,6 +46,7 @@ psql "$DATABASE_URL" -f migrations/005_add_legacy_transaction_id.sql
 psql "$DATABASE_URL" -f migrations/006_seed_legacy_master_data.sql
 psql "$DATABASE_URL" -f migrations/007_seed_reconciliation_categories.sql
 psql "$DATABASE_URL" -f migrations/008_create_ai_reports.sql
+psql "$DATABASE_URL" -f migrations/009_add_detached_raw_notification_status.sql
 go run ./cmd/api
 ```
 
