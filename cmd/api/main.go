@@ -34,6 +34,7 @@ func main() {
 	srv := server.NewWithOptions(cfg.Port, db, server.Options{
 		IngestAPIKey: cfg.IngestAPIKey, AppEnv: cfg.AppEnv, CORSAllowedOrigins: cfg.CORSAllowedOrigins,
 		OpenRouterAPIKey: cfg.OpenRouterAPIKey, OpenRouterModel: cfg.OpenRouterModel,
+		OpenRouterClassifierModel: cfg.OpenRouterClassifierModel,
 	})
 
 	log.Printf(

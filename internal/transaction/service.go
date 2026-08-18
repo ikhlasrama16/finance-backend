@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"finance-monitor/backend/internal/category"
+	"finance-monitor/backend/internal/rule"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -39,13 +40,23 @@ type categoryRepository interface {
 	GetByID(context.Context, int64) (category.Category, error)
 }
 
+type ruleRepository interface {
+	CreateCategoryRule(context.Context, string, int64, float64, int) (rule.CategoryRule, error)
+}
+
 type Service struct {
 	repository         repository
 	categoryRepository categoryRepository
+	ruleRepository     ruleRepository
 }
 
 func NewService(repository repository, categoryRepository categoryRepository) *Service {
 	return &Service{repository: repository, categoryRepository: categoryRepository}
+}
+
+func (s *Service) WithRuleRepository(r ruleRepository) *Service {
+	s.ruleRepository = r
+	return s
 }
 
 func (s *Service) List(ctx context.Context) ([]Transaction, error) {
@@ -144,7 +155,17 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateInput) (Tran
 	if input.Description != nil {
 		transaction.Description = normalizedOptionalString(input.Description)
 	}
-	return s.repository.Update(ctx, transaction)
+	updated, err := s.repository.Update(ctx, transaction)
+	if err != nil {
+		return Transaction{}, err
+	}
+	if input.LearnRule != nil && *input.LearnRule && s.ruleRepository != nil && updated.Merchant != nil && updated.CategoryID != nil {
+		merchant := strings.TrimSpace(*updated.Merchant)
+		if merchant != "" {
+			_, _ = s.ruleRepository.CreateCategoryRule(ctx, merchant, *updated.CategoryID, 1.0, 10)
+		}
+	}
+	return updated, nil
 }
 
 func (s *Service) Delete(ctx context.Context, id int64) (DeleteResult, error) {

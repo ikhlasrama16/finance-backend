@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"finance-monitor/backend/internal/category"
+	"finance-monitor/backend/internal/rule"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -224,5 +225,38 @@ func TestUpdateTrimsEditableText(t *testing.T) {
 	updated, err := service.Update(context.Background(), 1, UpdateInput{Merchant: &merchant, Description: &description})
 	if err != nil || updated.Merchant == nil || *updated.Merchant != "WARUNG" || updated.Description != nil {
 		t.Fatalf("updated=%#v err=%v", updated, err)
+	}
+}
+
+type fakeRuleRepo struct {
+	createdMerchant string
+	createdCatID    int64
+}
+
+func (f *fakeRuleRepo) CreateCategoryRule(_ context.Context, keyword string, categoryID int64, confidence float64, priority int) (rule.CategoryRule, error) {
+	f.createdMerchant = keyword
+	f.createdCatID = categoryID
+	return rule.CategoryRule{ID: 1, Keyword: keyword, CategoryID: categoryID, Confidence: confidence, Priority: priority}, nil
+}
+
+func TestExplicitLearnRuleInUpdate(t *testing.T) {
+	categoryID := int64(10)
+	merchant := "WARUNG TEST"
+	repository := &fakeMutationRepository{transactions: map[int64]Transaction{
+		1: {ID: 1, Type: "expense", Source: "notification", Merchant: &merchant},
+	}}
+	ruleRepo := &fakeRuleRepo{}
+	service := NewService(repository, fakeCategoryRepository{categoryID: {ID: categoryID, Type: "expense"}}).WithRuleRepository(ruleRepo)
+
+	learn := true
+	updated, err := service.Update(context.Background(), 1, UpdateInput{CategoryID: &categoryID, LearnRule: &learn})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.CategoryID == nil || *updated.CategoryID != categoryID {
+		t.Fatalf("expected category_id %d", categoryID)
+	}
+	if ruleRepo.createdMerchant != "WARUNG TEST" || ruleRepo.createdCatID != categoryID {
+		t.Fatalf("expected rule creation for WARUNG TEST, got %#v", ruleRepo)
 	}
 }

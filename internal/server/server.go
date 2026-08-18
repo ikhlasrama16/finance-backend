@@ -23,11 +23,12 @@ type Server struct {
 }
 
 type Options struct {
-	IngestAPIKey       string
-	AppEnv             string
-	CORSAllowedOrigins []string
-	OpenRouterAPIKey   string
-	OpenRouterModel    string
+	IngestAPIKey              string
+	AppEnv                    string
+	CORSAllowedOrigins        []string
+	OpenRouterAPIKey          string
+	OpenRouterModel           string
+	OpenRouterClassifierModel string
 }
 
 func New(
@@ -45,18 +46,24 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 	accountHandler := account.NewHandler(accountService)
 	categoryRepository := category.NewRepository(db)
 
+	ruleRepository := rule.NewRepository(db)
 	transactionRepository := transaction.NewRepository(db)
 	transactionService := transaction.NewService(
 		transactionRepository,
 		categoryRepository,
-	)
+	).WithRuleRepository(ruleRepository)
 	transactionHandler := transaction.NewHandler(transactionService)
 
 	categoryService := category.NewService(categoryRepository)
 	categoryHandler := category.NewHandler(categoryService)
 
 	notificationRepository := notification.NewRepository(db)
-	ruleRepository := rule.NewRepository(db)
+
+	classifierModel := options.OpenRouterClassifierModel
+	if classifierModel == "" {
+		classifierModel = options.OpenRouterModel
+	}
+	classifier := category.NewOpenRouterClassifier(options.OpenRouterAPIKey, classifierModel)
 
 	notificationService := notification.NewProcessingService(
 		db,
@@ -65,7 +72,7 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 		categoryRepository,
 		transactionRepository,
 		ruleRepository,
-	)
+	).WithClassifier(classifier)
 
 	notificationHandler := notification.NewHandler(
 		notificationService,

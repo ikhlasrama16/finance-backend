@@ -30,6 +30,9 @@ func (s *Service) process(ctx context.Context, raw Notification) (IngestionResul
 		}
 		return IngestionResult{RawNotificationID: raw.ID, Status: "ignored"}, nil
 	}
+	if parsed.ParseStatus == "FAILED" || parsed.ParseStatus == "UNRESOLVED" {
+		return s.failed(ctx, raw, "required transaction information missing", parserName)
+	}
 	if err := s.applyCategoryRule(ctx, parsed); err != nil {
 		return s.failed(ctx, raw, "category rule evaluation failed", parserName)
 	}
@@ -108,18 +111,64 @@ func (s *Service) parse(ctx context.Context, input parser.Input) (*parser.Result
 }
 
 func (s *Service) applyCategoryRule(ctx context.Context, result *parser.Result) error {
-	if result.Type != "expense" || s.ruleRepository == nil {
+	if result.Type != "expense" && result.Type != "income" {
 		return nil
 	}
-	rules, err := s.ruleRepository.ListActiveCategoryRules(ctx)
+
+	// 1, 2, 3: Check category rules (explicit, deterministic, and merchant memory)
+	if s.ruleRepository != nil {
+		rules, err := s.ruleRepository.ListActiveCategoryRules(ctx)
+		if err == nil && len(rules) > 0 {
+			haystack := strings.Join([]string{result.Merchant, result.Description, result.SourceAccountName}, " ")
+			if matched := rule.FirstCategoryRule(rules, haystack); matched != nil {
+				result.CategoryID = &matched.CategoryID
+				result.CategoryName = ""
+				return nil
+			}
+		}
+	}
+
+	if result.CategoryID != nil {
+		return nil
+	}
+
+	// 4. AI Classifier Fallback
+	merchant := strings.TrimSpace(result.Merchant)
+	if s.classifier == nil || merchant == "" || s.categoryRepository == nil {
+		return nil
+	}
+
+	categories, err := s.categoryRepository.ListByType(ctx, result.Type)
+	if err != nil || len(categories) == 0 {
+		return nil
+	}
+
+	allowedNames := make([]string, len(categories))
+	categoryMap := make(map[string]category.Category)
+	for i, cat := range categories {
+		allowedNames[i] = cat.Name
+		categoryMap[strings.ToLower(cat.Name)] = cat
+	}
+
+	res, err := s.classifier.Classify(ctx, category.ClassifyInput{
+		Type:              result.Type,
+		Merchant:          merchant,
+		Description:       result.Description,
+		Amount:            result.Amount,
+		AllowedCategories: allowedNames,
+	})
 	if err != nil {
-		return err
+		// AI failure must never cause transaction ingestion to fail
+		return nil
 	}
-	haystack := strings.Join([]string{result.Merchant, result.Description, result.SourceAccountName}, " ")
-	if matched := rule.FirstCategoryRule(rules, haystack); matched != nil {
-		result.CategoryID = &matched.CategoryID
-		result.CategoryName = ""
+
+	if res != nil && res.Confidence >= 0.85 {
+		if cat, ok := categoryMap[strings.ToLower(res.Category)]; ok {
+			result.CategoryID = &cat.ID
+			result.CategoryName = cat.Name
+		}
 	}
+
 	return nil
 }
 
@@ -154,7 +203,7 @@ func (s *Service) resolve(ctx context.Context, raw Notification, result *parser.
 		if result.CategoryID != nil {
 			cat, err = s.categoryRepository.GetByID(ctx, *result.CategoryID)
 		} else {
-			if result.Type == "expense" && strings.TrimSpace(result.CategoryName) == "" {
+			if strings.TrimSpace(result.CategoryName) == "" {
 				result.CategoryName = "Belum Dikategorikan"
 			}
 			cat, err = s.categoryRepository.GetByNameAndType(ctx, result.CategoryName, result.Type)

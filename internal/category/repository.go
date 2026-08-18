@@ -28,6 +28,32 @@ func (r *Repository) GetByNameAndType(ctx context.Context, name, categoryType st
 	return category, nil
 }
 
+func (r *Repository) ListByType(ctx context.Context, categoryType string) ([]Category, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id, name, type, created_at, updated_at
+		FROM categories
+		WHERE type = $1
+		ORDER BY name
+	`, categoryType)
+	if err != nil {
+		return nil, fmt.Errorf("query categories by type: %w", err)
+	}
+	defer rows.Close()
+
+	categories := make([]Category, 0)
+	for rows.Next() {
+		var category Category
+		if err := rows.Scan(&category.ID, &category.Name, &category.Type, &category.CreatedAt, &category.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan category: %w", err)
+		}
+		categories = append(categories, category)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate categories by type: %w", err)
+	}
+	return categories, nil
+}
+
 func NewRepository(db *pgxpool.Pool) *Repository {
 	return &Repository{db: db}
 }

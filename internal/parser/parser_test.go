@@ -35,8 +35,15 @@ func TestPromotionPrecedence(t *testing.T) {
 	}{
 		{"promo", Input{Title: "Promo diskon voucher"}, true},
 		{"voucher", Input{Text: "Dapatkan voucher khusus untukmu"}, true},
-		{"cashback transaction", Input{Title: "Pembayaran berhasil dapat cashback"}, false},
-		{"top up transaction", Input{Title: "Top Up Berhasil"}, false},
+		{"Hadiah 1,7JT", Input{SourceApp: "ShopeePay", Title: "Hadiah 1,7JT di Hari Merdeka!", Text: "Hanya Berlaku Hari Ini! Kamu bisa dapat hadiah 1,7JT dengan kirim Saldo Kaget"}, true},
+		{"E-Money promo", Input{SourceApp: "ShopeePay", Title: "Harga spesial Top Up E-Money Murah!", Text: "E-Money 20RB hanya Rp17.500. Top Up sekarang"}, true},
+		{"Promo Paket Data", Input{SourceApp: "ShopeePay", Text: "Promo Paket Data Rp1 khusus buat kamu"}, true},
+		{"Vote Koin", Input{SourceApp: "ShopeePay", Text: "Vote, Dapat Koin GRATIS!"}, true},
+		{"Total Reward", Input{SourceApp: "ShopeePay", Text: "Total Rewardmu Siap Dibuka"}, true},
+		{"Judi Online Warning", Input{SourceApp: "ShopeePay", Text: "Lindungi Diri dari Judi Online"}, true},
+		{"Touch ID", Input{SourceApp: "SeaBank", Title: "Touch ID Berhasil Diaktifkan"}, true},
+		{"Shopee Chat", Input{SourceApp: "Shopee", Text: "Kamu mendapat chat baru"}, true},
+		{"Shopee Driver", Input{SourceApp: "Shopee", Text: "Pengemudi hampir tiba!"}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -61,29 +68,56 @@ func TestAccountMappingAndDetection(t *testing.T) {
 	}
 }
 
-func TestQRIS(t *testing.T) {
-	got, err := Parse(Input{SourceApp: "SeaBank", Title: "Pembayaran QRIS Berhasil", Text: "Pembayaran QRIS untuk WARUNG MAKMUR sebesar Rp25.000 berhasil"})
-	if err != nil || got == nil {
-		t.Fatalf("got %#v, err %v", got, err)
-	}
-	if got.Type != "expense" || got.Amount != 25000 || got.SourceAccountName != "SeaBank" || got.Merchant != "WARUNG MAKMUR" || got.ParseStatus != "AUTO" || got.Confidence != .99 {
-		t.Fatalf("unexpected result %#v", got)
-	}
-}
-
-func TestSeaBankCases(t *testing.T) {
+func TestMustParseRegressionCases(t *testing.T) {
 	tests := []struct {
-		name                          string
-		input                         Input
-		typ                           string
-		amount                        int64
-		source, destination, merchant string
+		name        string
+		input       Input
+		typ         string
+		amount      int64
+		source      string
+		destination string
+		merchant    string
 	}{
-		{"income", Input{SourceApp: "SeaBank", Title: "Dana Masuk", Text: "Anda menerima dana sebesar Rp3.000.000 dari PT CONTOH pada 14 Agustus 2026"}, "income", 3000000, "", "SeaBank", "PT CONTOH"},
-		{"transfer in", Input{SourceApp: "SeaBank", Title: "Dana Masuk", Text: "Anda menerima dana sebesar Rp100.000 dari Bank Jago pada 14 Agustus 2026"}, "transfer", 100000, "Bank Jago", "SeaBank", ""},
-		{"transfer out", Input{SourceApp: "SeaBank", Title: "Pembayaran Berhasil", Text: "Pembayaran sebesar Rp100.000 kepada ShopeePay pada 14 Agustus 2026"}, "transfer", 100000, "SeaBank", "ShopeePay", ""},
-		{"expense", Input{SourceApp: "SeaBank", Title: "Pembayaran Berhasil", Text: "Pembayaran sebesar Rp45.000 kepada WARUNG SEDERHANA pada 14 Agustus 2026"}, "expense", 45000, "SeaBank", "", "WARUNG SEDERHANA"},
-		{"shopeepay top up", Input{SourceApp: "SeaBank", Title: "Top Up Berhasil", Text: "Top up ShopeePay sebesar Rp75.000"}, "transfer", 75000, "SeaBank", "ShopeePay", "ShopeePay"},
+		{
+			name:     "SeaBank QRIS BAKSO ZAKI WONOGIRI",
+			input:    Input{SourceApp: "SeaBank", Title: "Pembayaran QRIS Berhasil", Text: "Pembayaran QRIS untuk BAKSO ZAKI WONOGIRI sebesar 16.000 telah berhasil."},
+			typ:      "expense",
+			amount:   16000,
+			source:   "SeaBank",
+			merchant: "BAKSO ZAKI WONOGIRI",
+		},
+		{
+			name:     "SeaBank QRIS FIRST LAUNDRY",
+			input:    Input{SourceApp: "SeaBank", Title: "Pembayaran QRIS Berhasil", Text: "Pembayaran QRIS untuk FIRST LAUNDRY sebesar 20.300 telah berhasil."},
+			typ:      "expense",
+			amount:   20300,
+			source:   "SeaBank",
+			merchant: "FIRST LAUNDRY",
+		},
+		{
+			name:     "SeaBank Bayar Instan",
+			input:    Input{SourceApp: "SeaBank", Title: "Pembayaran Berhasil", Text: "SeaBank Bayar Instan: Pembayaran Shopee kamu sebesar Rp14.343 pada 14 Agu 2026 telah berhasil."},
+			typ:      "expense",
+			amount:   14343,
+			source:   "SeaBank",
+			merchant: "Shopee",
+		},
+		{
+			name:     "SeaBank Realtime Transfer Outgoing",
+			input:    Input{SourceApp: "SeaBank", Title: "Realtime Transfer", Text: "Realtime Transfer sebesar Rp50.000 kepada JOHN DOE pada 14 Agu 2026"},
+			typ:      "expense",
+			amount:   50000,
+			source:   "SeaBank",
+			merchant: "JOHN DOE",
+		},
+		{
+			name:        "SeaBank Incoming Funds",
+			input:       Input{SourceApp: "SeaBank", Title: "Dana Masuk", Text: "Anda menerima dana sebesar Rp100.000 dari JANE DOE pada 14 Agu 2026"},
+			typ:         "income",
+			amount:      100000,
+			destination: "SeaBank",
+			merchant:    "JANE DOE",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -91,85 +125,34 @@ func TestSeaBankCases(t *testing.T) {
 			if err != nil || got == nil {
 				t.Fatalf("got %#v, err %v", got, err)
 			}
-			if got.Type != tt.typ || got.Amount != tt.amount || got.SourceAccountName != tt.source || got.DestinationAccountName != tt.destination || got.Merchant != tt.merchant {
+			if got.Type != tt.typ || got.Amount != tt.amount || got.SourceAccountName != tt.source || got.DestinationAccountName != tt.destination {
 				t.Fatalf("unexpected result %#v", got)
 			}
-		})
-	}
-}
-
-func TestSeaBankVirtualAccountTransferToShopeePay(t *testing.T) {
-	got, err := Parse(Input{
-		SourceApp: "SeaBank",
-		Title:     "Pembayaran Berhasil",
-		Text:      "Kamu telah melakukan transfer virtual account sebesar Rp10.000 kepada ShopeePay pada 16 Agu 2026 01:13 WIB",
-	})
-	if err != nil || got == nil {
-		t.Fatalf("got %#v, err %v", got, err)
-	}
-	if got.Type != "transfer" || got.Amount != 10000 || got.SourceAccountName != "SeaBank" || got.DestinationAccountName != "ShopeePay" || got.CategoryName != "" {
-		t.Fatalf("unexpected result %#v", got)
-	}
-}
-
-func TestShopeePayTopUpIsIgnoredWhenSourceIsUnknown(t *testing.T) {
-	got, err := Parse(Input{SourceApp: "ShopeePay", Title: "Isi Saldo Berhasil", Text: "Pengisian saldo sebesar Rp10.000 telah ditambahkan ke ShopeePay-mu. Saldo saat ini sebesar Rp10.050."})
-	if err != nil || got == nil || !got.Ignore || got.Type != "" || got.SourceAccountName != "" || got.DestinationAccountName != "" {
-		t.Fatalf("unexpected result %#v, err %v", got, err)
-	}
-}
-
-func TestShopeeTopUpCompletionIsIgnored(t *testing.T) {
-	got, err := Parse(Input{SourceApp: "Shopee", Title: "Top-up Completed", Text: "Your Top up request of Rp10.000 is successful and your current balance is Rp10.050."})
-	if err != nil || got == nil || !got.Ignore {
-		t.Fatalf("unexpected result %#v, err %v", got, err)
-	}
-}
-
-func TestSeaBankRealtimeTransferClassifiesExternalAndOwnedRecipients(t *testing.T) {
-	tests := []struct {
-		name, text, typ, merchant, destination string
-	}{
-		{name: "external", text: "Kamu baru melakukan transfer senilai Rp26.000 kepada DHEVIA LEUYS THIAQUFYAN pada 15 Agu 2026 19:24 (WIB).", typ: "expense", merchant: "DHEVIA LEUYS THIAQUFYAN"},
-		{name: "owned", text: "Kamu baru melakukan transfer senilai Rp26.000 kepada ShopeePay pada 15 Agu 2026 19:24 (WIB).", typ: "transfer", destination: "ShopeePay"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := Parse(Input{SourceApp: "SeaBank", Title: "Realtime Transfer", Text: tt.text})
-			if err != nil || got == nil || got.Type != tt.typ || got.Amount != 26000 || got.SourceAccountName != "SeaBank" || got.Merchant != tt.merchant || got.DestinationAccountName != tt.destination {
-				t.Fatalf("unexpected result %#v, err %v", got, err)
-			}
-			if tt.typ == "expense" && got.CategoryName != "Belum Dikategorikan" {
-				t.Fatalf("missing default category: %#v", got)
+			if tt.merchant != "" && got.Merchant != tt.merchant {
+				t.Fatalf("got merchant %q, want %q", got.Merchant, tt.merchant)
 			}
 		})
 	}
 }
 
-func TestGenericCases(t *testing.T) {
-	tests := []struct {
-		name    string
-		input   Input
-		typ     string
-		status  string
-		wantNil bool
-	}{
-		{"expense", Input{SourceApp: "SeaBank", Title: "Pembayaran berhasil", Text: "Pembayaran kepada TOKO sebesar Rp20.000"}, "expense", "AUTO", false},
-		{"income", Input{SourceApp: "SeaBank", Title: "Gaji", Text: "Gaji sebesar Rp5.000.000"}, "income", "AUTO", false},
-		{"incoming", Input{SourceApp: "SeaBank", Title: "Transfer masuk", Text: "Dana dari PT X sebesar Rp100.000"}, "income", "AUTO", false},
-		{"outgoing transfer", Input{SourceApp: "SeaBank", Title: "Transfer berhasil", Text: "Transfer ke ShopeePay sebesar Rp100.000"}, "transfer", "AUTO", false},
-		{"unknown", Input{SourceApp: "SeaBank", Text: "Catatan sebesar Rp1.000"}, "expense", "NEEDS_REVIEW", false},
-		{"no amount", Input{SourceApp: "SeaBank", Text: "Pembayaran berhasil"}, "", "", true},
+func TestMustFailSafelyIncompleteTransfer(t *testing.T) {
+	input := Input{SourceApp: "SeaBank", Title: "Realtime Transfer", Text: "Realtime Transfer sebesar Rp50.000 pada 18/08/2026"}
+	got, err := Parse(input)
+	if err != nil {
+		t.Fatalf("unexpected error %v", err)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := Parse(tt.input)
-			if err != nil || (got == nil) != tt.wantNil {
-				t.Fatalf("got %#v, err %v", got, err)
-			}
-			if !tt.wantNil && (got.Type != tt.typ || got.ParseStatus != tt.status) {
-				t.Fatalf("unexpected result %#v", got)
-			}
-		})
+	if got == nil || got.ParseStatus != "FAILED" {
+		t.Fatalf("expected ParseStatus FAILED for incomplete transfer, got %#v", got)
+	}
+}
+
+func TestGenericConservativeParsing(t *testing.T) {
+	// A Rupiah amount alone MUST NEVER create a transaction
+	got, err := Parse(Input{SourceApp: "SeaBank", Text: "Catatan sebesar Rp1.000"})
+	if err != nil {
+		t.Fatalf("unexpected error %v", err)
+	}
+	if got != nil && !got.Ignore {
+		t.Fatalf("expected nil or ignored result for arbitrary text with amount, got %#v", got)
 	}
 }

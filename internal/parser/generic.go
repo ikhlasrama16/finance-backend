@@ -46,7 +46,7 @@ func (genericParser) Parse(input Input) (*Result, error) {
 	if containsAny(normalized, "gaji", "salary", "payroll", "bonus", "pendapatan", "cashback diterima") {
 		return &Result{Type: "income", Amount: amount, DestinationAccountName: sourceIfOwned(source), Merchant: merchant, CategoryName: "Pemasukan", ParseStatus: "AUTO", Confidence: 0.80}, nil
 	}
-	return &Result{Type: "expense", Amount: amount, SourceAccountName: sourceIfOwned(source), Merchant: merchant, ParseStatus: "NEEDS_REVIEW", Confidence: 0.40}, nil
+	return nil, nil
 }
 
 func sourceIfOwned(name string) string {

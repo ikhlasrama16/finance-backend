@@ -7,6 +7,7 @@ type seaBankParser struct{}
 var seaAmountRE = regexp.MustCompile(`(?i)(?:sebesar|senilai)\s*rp\s*([\d.,]+)`)
 var incomingFromRE = regexp.MustCompile(`(?i)dari\s+(.+?)\s+pada\s+`)
 var paymentToRE = regexp.MustCompile(`(?i)kepada\s+(.+?)\s+pada\s+`)
+var bayarInstanMerchantRE = regexp.MustCompile(`(?i)pembayaran\s+([a-z0-9\s]+?)\s+(?:kamu\s+)?sebesar`)
 
 func (seaBankParser) CanParse(input Input) bool {
 	return accountFromSource(input.SourceApp) == "SeaBank"
@@ -33,14 +34,39 @@ func (seaBankParser) Parse(input Input) (*Result, error) {
 		if amount == 0 {
 			return nil, nil
 		}
+		if merchant == "" {
+			return &Result{
+				Type:              "expense",
+				Amount:            amount,
+				SourceAccountName: "SeaBank",
+				ParseStatus:       "FAILED",
+			}, nil
+		}
 		if owned := detectOwnedAccount(merchant); owned != "" {
 			return &Result{Type: "transfer", Amount: amount, SourceAccountName: "SeaBank", DestinationAccountName: owned, ParseStatus: "AUTO", Confidence: 0.98}, nil
 		}
 		return &Result{Type: "expense", Amount: amount, SourceAccountName: "SeaBank", Merchant: merchant, CategoryName: "Belum Dikategorikan", ParseStatus: "AUTO", Confidence: 0.90}, nil
 	}
+	if containsAny(normalized, "seabank bayar instan", "bayar instan") {
+		amount := amountFromRegex(text, seaAmountRE)
+		merchant := capture(bayarInstanMerchantRE, text)
+		if merchant == "" {
+			merchant = capture(paymentToRE, text)
+		}
+		if amount == 0 {
+			return nil, nil
+		}
+		if owned := detectOwnedAccount(merchant); owned != "" {
+			return &Result{Type: "transfer", Amount: amount, SourceAccountName: "SeaBank", DestinationAccountName: owned, ParseStatus: "AUTO", Confidence: 0.98}, nil
+		}
+		return &Result{Type: "expense", Amount: amount, SourceAccountName: "SeaBank", Merchant: merchant, CategoryName: "Belum Dikategorikan", Description: "SeaBank Bayar Instan", ParseStatus: "AUTO", Confidence: 0.95}, nil
+	}
 	if containsAny(normalized, "pembayaran berhasil") {
 		amount := amountFromRegex(text, seaAmountRE)
 		destination := capture(paymentToRE, text)
+		if destination == "" {
+			destination = capture(bayarInstanMerchantRE, text)
+		}
 		if amount == 0 {
 			return nil, nil
 		}

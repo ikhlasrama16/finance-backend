@@ -50,6 +50,7 @@ type UpdateInput struct {
 	CategoryID  *int64  `json:"category_id"`
 	Merchant    *string `json:"merchant"`
 	Description *string `json:"description"`
+	LearnRule   *bool   `json:"learn_rule,omitempty"`
 }
 
 type DeleteResult struct {

@@ -56,3 +56,30 @@ func (r *Repository) ListActiveCategoryRules(ctx context.Context) ([]CategoryRul
 	}
 	return rules, nil
 }
+
+func (r *Repository) CreateCategoryRule(ctx context.Context, keyword string, categoryID int64, confidence float64, priority int) (CategoryRule, error) {
+	keyword = Normalize(keyword)
+	if keyword == "" {
+		return CategoryRule{}, fmt.Errorf("empty keyword")
+	}
+	var existing CategoryRule
+	err := r.db.QueryRow(ctx, `
+		SELECT id, keyword, category_id, confidence, priority
+		FROM category_rules
+		WHERE LOWER(keyword) = LOWER($1) AND is_active = TRUE
+		LIMIT 1
+	`, keyword).Scan(&existing.ID, &existing.Keyword, &existing.CategoryID, &existing.Confidence, &existing.Priority)
+	if err == nil {
+		return existing, nil
+	}
+	var created CategoryRule
+	err = r.db.QueryRow(ctx, `
+		INSERT INTO category_rules (keyword, category_id, confidence, is_active, priority)
+		VALUES ($1, $2, $3, TRUE, $4)
+		RETURNING id, keyword, category_id, confidence, priority
+	`, keyword, categoryID, confidence, priority).Scan(&created.ID, &created.Keyword, &created.CategoryID, &created.Confidence, &created.Priority)
+	if err != nil {
+		return CategoryRule{}, fmt.Errorf("create category rule: %w", err)
+	}
+	return created, nil
+}

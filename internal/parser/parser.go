@@ -15,9 +15,6 @@ func (r *Registry) ParseWithRules(input Input, matcher RuleMatcher) (*Result, er
 	if r == nil {
 		r = NewRegistry()
 	}
-	if r.parsers[0].CanParse(input) {
-		return r.parsers[0].Parse(input)
-	}
 	if isPromotion(input) {
 		return promotionResult(), nil
 	}
@@ -26,7 +23,7 @@ func (r *Registry) ParseWithRules(input Input, matcher RuleMatcher) (*Result, er
 			return result, err
 		}
 	}
-	for _, p := range r.parsers[1:] {
+	for _, p := range r.parsers {
 		if p.CanParse(input) {
 			if result, err := p.Parse(input); err != nil || result != nil {
 				return result, err

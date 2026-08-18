@@ -32,6 +32,7 @@ type Service struct {
 	categoryRepository    categoryResolver
 	transactionRepository parsedTransactionRepository
 	ruleRepository        ruleRepository
+	classifier            category.Classifier
 }
 
 type accountResolver interface {
@@ -40,6 +41,7 @@ type accountResolver interface {
 type categoryResolver interface {
 	GetByNameAndType(context.Context, string, string) (category.Category, error)
 	GetByID(context.Context, int64) (category.Category, error)
+	ListByType(context.Context, string) ([]category.Category, error)
 }
 type parsedTransactionRepository interface {
 	CreateParsed(context.Context, pgx.Tx, transaction.CreateParsedInput) (transaction.Transaction, error)
@@ -47,6 +49,7 @@ type parsedTransactionRepository interface {
 type ruleRepository interface {
 	ListActiveParserRules(context.Context) ([]rule.ParserRule, error)
 	ListActiveCategoryRules(context.Context) ([]rule.CategoryRule, error)
+	CreateCategoryRule(context.Context, string, int64, float64, int) (rule.CategoryRule, error)
 }
 
 func NewService(repository *Repository) *Service {
@@ -56,11 +59,16 @@ func NewService(repository *Repository) *Service {
 }
 
 func NewProcessingService(db *pgxpool.Pool, repository *Repository, accountRepository *account.Repository, categoryRepository *category.Repository, transactionRepository *transaction.Repository, ruleRepositories ...*rule.Repository) *Service {
-	var ruleRepository *rule.Repository
+	var ruleRepo *rule.Repository
 	if len(ruleRepositories) > 0 {
-		ruleRepository = ruleRepositories[0]
+		ruleRepo = ruleRepositories[0]
 	}
-	return &Service{repository: repository, db: db, accountRepository: accountRepository, categoryRepository: categoryRepository, transactionRepository: transactionRepository, ruleRepository: ruleRepository}
+	return &Service{repository: repository, db: db, accountRepository: accountRepository, categoryRepository: categoryRepository, transactionRepository: transactionRepository, ruleRepository: ruleRepo}
+}
+
+func (s *Service) WithClassifier(classifier category.Classifier) *Service {
+	s.classifier = classifier
+	return s
 }
 
 func (s *Service) Create(

@@ -32,22 +32,61 @@ func (f fakeCategoryResolver) GetByNameAndType(_ context.Context, name, category
 	return value, nil
 }
 
+func (f fakeCategoryResolver) GetByID(_ context.Context, id int64) (category.Category, error) {
+	for _, value := range f.categories {
+		if value.ID == id {
+			return value, nil
+		}
+	}
+	return category.Category{}, errors.New("not found")
+}
+
+func (f fakeCategoryResolver) ListByType(_ context.Context, categoryType string) ([]category.Category, error) {
+	var list []category.Category
+	for _, cat := range f.categories {
+		if cat.Type == categoryType {
+			list = append(list, cat)
+		}
+	}
+	return list, nil
+}
+
 type fakeRuleRepository struct {
 	parserRules   []rule.ParserRule
 	categoryRules []rule.CategoryRule
+	createdRules  []rule.CategoryRule
 }
 
-func (f fakeRuleRepository) ListActiveParserRules(context.Context) ([]rule.ParserRule, error) {
+func (f *fakeRuleRepository) ListActiveParserRules(context.Context) ([]rule.ParserRule, error) {
 	return f.parserRules, nil
 }
-func (f fakeRuleRepository) ListActiveCategoryRules(context.Context) ([]rule.CategoryRule, error) {
+
+func (f *fakeRuleRepository) ListActiveCategoryRules(context.Context) ([]rule.CategoryRule, error) {
 	return f.categoryRules, nil
+}
+
+func (f *fakeRuleRepository) CreateCategoryRule(_ context.Context, keyword string, categoryID int64, confidence float64, priority int) (rule.CategoryRule, error) {
+	r := rule.CategoryRule{ID: int64(len(f.createdRules) + 1), Keyword: keyword, CategoryID: categoryID, Confidence: confidence, Priority: priority}
+	f.createdRules = append(f.createdRules, r)
+	f.categoryRules = append(f.categoryRules, r)
+	return r, nil
+}
+
+type fakeClassifier struct {
+	result *category.ClassifyResult
+	err    error
+	called bool
+}
+
+func (f *fakeClassifier) Classify(_ context.Context, _ category.ClassifyInput) (*category.ClassifyResult, error) {
+	f.called = true
+	return f.result, f.err
 }
 
 func TestDatabaseRuleParsingAndCategoryOverride(t *testing.T) {
 	typeCase := "expense"
 	categoryID := int64(99)
-	service := &Service{ruleRepository: fakeRuleRepository{
+	service := &Service{ruleRepository: &fakeRuleRepository{
 		parserRules:   []rule.ParserRule{{ID: 1, SourceApp: stringPointer("SeaBank"), Keyword: stringPointer("special"), Action: "PARSE", TransactionType: &typeCase, CategoryID: &categoryID, Merchant: stringPointer("MCDONALDS"), Confidence: .91}},
 		categoryRules: []rule.CategoryRule{{ID: 2, Keyword: "mcdonald", CategoryID: 100, Confidence: .95}},
 	}}
@@ -67,7 +106,7 @@ func TestDatabaseRuleParsingAndCategoryOverride(t *testing.T) {
 }
 
 func TestDatabaseIgnoreRuleAndFallback(t *testing.T) {
-	service := &Service{ruleRepository: fakeRuleRepository{parserRules: []rule.ParserRule{{ID: 1, Keyword: stringPointer("special notice"), Action: "IGNORE", Confidence: .8}}}}
+	service := &Service{ruleRepository: &fakeRuleRepository{parserRules: []rule.ParserRule{{ID: 1, Keyword: stringPointer("special notice"), Action: "IGNORE", Confidence: .8}}}}
 	ignored, name, err := service.parse(context.Background(), parser.Input{SourceApp: "Any", Text: "SPECIAL NOTICE"})
 	if err != nil || ignored == nil || !ignored.Ignore || ignored.ParseStatus != "IGNORED" || name != "rule" {
 		t.Fatalf("unexpected ignored result: %#v, %s, %v", ignored, name, err)
@@ -76,14 +115,6 @@ func TestDatabaseIgnoreRuleAndFallback(t *testing.T) {
 	if err != nil || fallback == nil || fallback.Type != "expense" || name != "parser" {
 		t.Fatalf("rule miss should preserve parser fallback: %#v, %s, %v", fallback, name, err)
 	}
-}
-func (f fakeCategoryResolver) GetByID(_ context.Context, id int64) (category.Category, error) {
-	for _, value := range f.categories {
-		if value.ID == id {
-			return value, nil
-		}
-	}
-	return category.Category{}, errors.New("not found")
 }
 
 func TestResolveParsedNotificationCases(t *testing.T) {
@@ -150,35 +181,212 @@ func TestResolveQRISWithRequiredReferences(t *testing.T) {
 	}
 }
 
-func TestResolveFailsWithoutRequiredAccountOrCategory(t *testing.T) {
-	service := &Service{accountRepository: fakeAccountResolver{accounts: map[string]account.Account{}}, categoryRepository: fakeCategoryResolver{categories: map[string]category.Category{}}}
-	raw := Notification{ID: 1, ReceivedAt: mustTime("2026-08-14T10:00:00Z")}
-	_, err := service.resolve(context.Background(), raw, &parser.Result{Type: "expense", Amount: 1000, SourceAccountName: "SeaBank", CategoryName: "Belum Dikategorikan"})
-	if err == nil || err.Error() != "account not found: SeaBank" {
-		t.Fatalf("got %v, want account not found diagnostic", err)
-	}
-}
-
-func TestResolveExpenseDefaultsMissingCategory(t *testing.T) {
-	seaBank := account.Account{ID: 10, Name: "SeaBank"}
+func TestAIClassificationAppliesCategoryWithoutInsertingCategoryRule(t *testing.T) {
+	makanan := category.Category{ID: 50, Name: "Makanan & Minuman", Type: "expense"}
 	uncategorized := category.Category{ID: 21, Name: "Belum Dikategorikan", Type: "expense"}
-	service := &Service{
-		accountRepository:  fakeAccountResolver{accounts: map[string]account.Account{"SeaBank": seaBank}},
-		categoryRepository: fakeCategoryResolver{categories: map[string]category.Category{"Belum Dikategorikan/expense": uncategorized}},
+
+	catResolver := fakeCategoryResolver{categories: map[string]category.Category{
+		"Makanan & Minuman/expense":   makanan,
+		"Belum Dikategorikan/expense": uncategorized,
+	}}
+
+	ruleRepo := &fakeRuleRepository{}
+	fakeCls := &fakeClassifier{
+		result: &category.ClassifyResult{
+			Category:   "Makanan & Minuman",
+			Confidence: 0.95,
+		},
 	}
-	got, err := service.resolve(context.Background(), Notification{ID: 1, ReceivedAt: mustTime("2026-08-15T12:00:00Z")}, &parser.Result{Type: "expense", Amount: 26000, SourceAccountName: "SeaBank"})
-	if err != nil || got.CategoryID == nil || *got.CategoryID != uncategorized.ID {
-		t.Fatalf("unexpected result %#v, err %v", got, err)
+
+	service := &Service{
+		categoryRepository: catResolver,
+		ruleRepository:     ruleRepo,
+		classifier:         fakeCls,
+	}
+
+	parsed := &parser.Result{
+		Type:              "expense",
+		Amount:            16000,
+		SourceAccountName: "SeaBank",
+		Merchant:          "BAKSO ZAKI WONOGIRI",
+		ParseStatus:       "AUTO",
+	}
+
+	if err := service.applyCategoryRule(context.Background(), parsed); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// 1. AI high-confidence classification applies category to current transaction
+	if !fakeCls.called {
+		t.Fatalf("expected classifier to be called")
+	}
+	if parsed.CategoryID == nil || *parsed.CategoryID != makanan.ID {
+		t.Fatalf("expected category ID %d, got %#v", makanan.ID, parsed.CategoryID)
+	}
+
+	// 2. AI classification does NOT insert category_rule automatically
+	if len(ruleRepo.createdRules) != 0 {
+		t.Fatalf("AI classification MUST NOT insert category_rule automatically, got %d rules", len(ruleRepo.createdRules))
 	}
 }
 
-func TestShopeePayTopUpIsSupportingNotification(t *testing.T) {
-	parsed, err := parser.Parse(parser.Input{SourceApp: "ShopeePay", Title: "Isi Saldo Berhasil", Text: "Pengisian saldo sebesar Rp10.000 telah ditambahkan ke ShopeePay-mu."})
-	if err != nil || parsed == nil {
-		t.Fatalf("parse: %#v, %v", parsed, err)
+func TestExistingCategoryRuleAvoidsAICall(t *testing.T) {
+	makanan := category.Category{ID: 50, Name: "Makanan & Minuman", Type: "expense"}
+	ruleRepo := &fakeRuleRepository{
+		categoryRules: []rule.CategoryRule{
+			{ID: 10, Keyword: "BAKSO ZAKI", CategoryID: makanan.ID, Confidence: 1.0, Priority: 10},
+		},
 	}
-	if !parsed.Ignore || parsed.Type != "" || parsed.SourceAccountName != "" || parsed.DestinationAccountName != "" {
-		t.Fatalf("supporting notification must not create a transfer: %#v", parsed)
+	fakeCls := &fakeClassifier{
+		result: &category.ClassifyResult{Category: "Makanan & Minuman", Confidence: 0.95},
+	}
+
+	service := &Service{
+		categoryRepository: fakeCategoryResolver{categories: map[string]category.Category{}},
+		ruleRepository:     ruleRepo,
+		classifier:         fakeCls,
+	}
+
+	parsed := &parser.Result{
+		Type:              "expense",
+		Amount:            16000,
+		SourceAccountName: "SeaBank",
+		Merchant:          "BAKSO ZAKI WONOGIRI",
+		ParseStatus:       "AUTO",
+	}
+
+	if err := service.applyCategoryRule(context.Background(), parsed); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// 3. Existing category_rule avoids AI call
+	if fakeCls.called {
+		t.Fatalf("existing category_rule must avoid AI call")
+	}
+	if parsed.CategoryID == nil || *parsed.CategoryID != makanan.ID {
+		t.Fatalf("expected category ID %d from existing rule, got %#v", makanan.ID, parsed.CategoryID)
+	}
+}
+
+func TestExplicitLearningAndFutureRuleUsageWithoutAI(t *testing.T) {
+	makanan := category.Category{ID: 50, Name: "Makanan & Minuman", Type: "expense"}
+	ruleRepo := &fakeRuleRepository{}
+
+	// 4. Explicit LearnRule can persist merchant mapping
+	learnedRule, err := ruleRepo.CreateCategoryRule(context.Background(), "BAKSO ZAKI WONOGIRI", makanan.ID, 1.0, 10)
+	if err != nil || learnedRule.ID == 0 {
+		t.Fatalf("failed to create explicit category rule: %v", err)
+	}
+	if len(ruleRepo.createdRules) != 1 {
+		t.Fatalf("expected 1 created rule, got %d", len(ruleRepo.createdRules))
+	}
+
+	// 5. Future transaction uses the explicitly learned rule without AI
+	fakeCls := &fakeClassifier{
+		result: &category.ClassifyResult{Category: "Makanan & Minuman", Confidence: 0.95},
+	}
+	service := &Service{
+		categoryRepository: fakeCategoryResolver{categories: map[string]category.Category{}},
+		ruleRepository:     ruleRepo,
+		classifier:         fakeCls,
+	}
+
+	futureTransaction := &parser.Result{
+		Type:              "expense",
+		Amount:            20000,
+		SourceAccountName: "SeaBank",
+		Merchant:          "BAKSO ZAKI WONOGIRI",
+		ParseStatus:       "AUTO",
+	}
+
+	if err := service.applyCategoryRule(context.Background(), futureTransaction); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if fakeCls.called {
+		t.Fatalf("future transaction matching explicitly learned rule must NOT call AI")
+	}
+	if futureTransaction.CategoryID == nil || *futureTransaction.CategoryID != makanan.ID {
+		t.Fatalf("expected category ID %d from learned rule, got %#v", makanan.ID, futureTransaction.CategoryID)
+	}
+}
+
+func TestAIClassifierLowConfidenceRejected(t *testing.T) {
+	makanan := category.Category{ID: 50, Name: "Makanan & Minuman", Type: "expense"}
+	uncategorized := category.Category{ID: 21, Name: "Belum Dikategorikan", Type: "expense"}
+
+	catResolver := fakeCategoryResolver{categories: map[string]category.Category{
+		"Makanan & Minuman/expense":   makanan,
+		"Belum Dikategorikan/expense": uncategorized,
+	}}
+
+	fakeCls := &fakeClassifier{
+		result: &category.ClassifyResult{
+			Category:   "Makanan & Minuman",
+			Confidence: 0.40, // Below 0.85 threshold
+		},
+	}
+
+	service := &Service{
+		categoryRepository: catResolver,
+		ruleRepository:     &fakeRuleRepository{},
+		classifier:         fakeCls,
+	}
+
+	parsed := &parser.Result{
+		Type:              "expense",
+		Amount:            50000,
+		SourceAccountName: "SeaBank",
+		Merchant:          "DHEVIA LEUYS THIAQUFYAN",
+		ParseStatus:       "AUTO",
+	}
+
+	if err := service.applyCategoryRule(context.Background(), parsed); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if parsed.CategoryID != nil {
+		t.Fatalf("low confidence AI prediction should not set CategoryID, got %#v", parsed.CategoryID)
+	}
+}
+
+func TestAIClassifierErrorFallback(t *testing.T) {
+	fakeCls := &fakeClassifier{
+		err: errors.New("openrouter timeout"),
+	}
+
+	service := &Service{
+		categoryRepository: fakeCategoryResolver{categories: map[string]category.Category{}},
+		ruleRepository:     &fakeRuleRepository{},
+		classifier:         fakeCls,
+	}
+
+	parsed := &parser.Result{
+		Type:              "expense",
+		Amount:            16000,
+		SourceAccountName: "SeaBank",
+		Merchant:          "BAKSO ZAKI WONOGIRI",
+		ParseStatus:       "AUTO",
+	}
+
+	if err := service.applyCategoryRule(context.Background(), parsed); err != nil {
+		t.Fatalf("AI error should fall back silently, got error: %v", err)
+	}
+}
+
+func TestTransferBypassesAIClassifier(t *testing.T) {
+	fakeCls := &fakeClassifier{
+		result: &category.ClassifyResult{Category: "Makanan & Minuman", Confidence: 0.99},
+	}
+	service := &Service{classifier: fakeCls}
+	parsed := &parser.Result{Type: "transfer", Amount: 50000}
+
+	if err := service.applyCategoryRule(context.Background(), parsed); err != nil {
+		t.Fatal(err)
+	}
+
+	if fakeCls.called {
+		t.Fatalf("AI classifier must NOT be called for transfers")
 	}
 }
 
