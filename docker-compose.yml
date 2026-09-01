@@ -1,0 +1,27 @@
+services:
+  finance-api:
+    build: .
+    container_name: finance-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2
+    container_name: caddy-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - finance-api
+
+volumes:
+  caddy_data:
+  caddy_config:
