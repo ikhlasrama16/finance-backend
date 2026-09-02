@@ -1,4 +1,15 @@
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: finance-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: mikhlasr7A
+      POSTGRES_DB: finance
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   finance-api:
     build: .
     container_name: finance-api
@@ -7,6 +18,8 @@ services:
       - .env
     expose:
       - "8080"
+    depends_on:
+      - db
 
   caddy:
     image: caddy:2
@@ -23,5 +36,6 @@ services:
       - finance-api
 
 volumes:
+  postgres_data:
   caddy_data:
   caddy_config:
