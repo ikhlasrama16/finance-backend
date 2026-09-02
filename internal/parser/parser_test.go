@@ -44,12 +44,36 @@ func TestPromotionPrecedence(t *testing.T) {
 		{"Touch ID", Input{SourceApp: "SeaBank", Title: "Touch ID Berhasil Diaktifkan"}, true},
 		{"Shopee Chat", Input{SourceApp: "Shopee", Text: "Kamu mendapat chat baru"}, true},
 		{"Shopee Driver", Input{SourceApp: "Shopee", Text: "Pengemudi hampir tiba!"}, true},
+		{"cashback transaction", Input{Title: "Pembayaran berhasil dapat cashback", Text: "Pembayaran sebesar Rp50.000 berhasil dapat cashback"}, false},
+		{"QRIS with promo", Input{SourceApp: "SeaBank", Title: "Pembayaran QRIS Berhasil", Text: "Pembayaran QRIS untuk WARUNG MAKMUR sebesar Rp25.000 telah berhasil. Dapatkan diskon khusus untukmu!"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := Parse(tt.input)
 			if err != nil || (got != nil && got.Ignore) != tt.ignored {
 				t.Fatalf("got %#v, err %v", got, err)
+			}
+		})
+	}
+}
+
+func TestSeaBankRealtimeTransferClassifiesExternalAndOwnedRecipients(t *testing.T) {
+	tests := []struct {
+		name, title, text, typ, merchant, destination string
+	}{
+		{name: "external", title: "Realtime Transfer", text: "Kamu baru melakukan transfer senilai Rp26.000 kepada DHEVIA LEUYS THIAQUFYAN pada 15 Agu 2026 19:24 (WIB).", typ: "expense", merchant: "DHEVIA LEUYS THIAQUFYAN"},
+		{name: "owned", title: "Realtime Transfer", text: "Kamu baru melakukan transfer senilai Rp26.000 kepada ShopeePay pada 15 Agu 2026 19:24 (WIB).", typ: "transfer", destination: "ShopeePay"},
+		{name: "external without realtime title", title: "Transfer Berhasil", text: "Kamu baru melakukan transfer senilai Rp26.000 kepada DHEVIA LEUYS THIAQUFYAN pada 15 Agu 2026 19:24 (WIB).", typ: "expense", merchant: "DHEVIA LEUYS THIAQUFYAN"},
+		{name: "virtual account transfer", title: "Pembayaran Berhasil", text: "Kamu telah melakukan transfer virtual account sebesar Rp10.000 kepada ShopeePay pada 16 Agu 2026 01:13 WIB", typ: "transfer", destination: "ShopeePay"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Parse(Input{SourceApp: "SeaBank", Title: tt.title, Text: tt.text})
+			if err != nil || got == nil || got.Type != tt.typ || got.Amount != 26000 && got.Amount != 10000 || got.SourceAccountName != "SeaBank" || got.Merchant != tt.merchant || got.DestinationAccountName != tt.destination {
+				t.Fatalf("unexpected result %#v, err %v", got, err)
+			}
+			if tt.typ == "expense" && got.CategoryName != "Belum Dikategorikan" {
+				t.Fatalf("missing default category: %#v", got)
 			}
 		})
 	}
@@ -146,13 +170,44 @@ func TestMustFailSafelyIncompleteTransfer(t *testing.T) {
 	}
 }
 
+func TestShopeePaySupportingTopUpIgnored(t *testing.T) {
+	got, err := Parse(Input{SourceApp: "ShopeePay", Title: "Isi Saldo Berhasil", Text: "Pengisian saldo sebesar Rp10.000 telah ditambahkan ke ShopeePay-mu. Saldo saat ini sebesar Rp10.050."})
+	if err != nil || got == nil || !got.Ignore || got.ParseStatus != "IGNORED_SUPPORTING_NOTIFICATION" {
+		t.Fatalf("unexpected result %#v, err %v", got, err)
+	}
+}
+
+func TestShopeeMarketplaceTopUpCompletionIgnored(t *testing.T) {
+	got, err := Parse(Input{SourceApp: "Shopee", Title: "Top-up Completed", Text: "Your Top up request of Rp10.000 is successful and your current balance is Rp10.050."})
+	if err != nil || got == nil || !got.Ignore || got.ParseStatus != "IGNORED_SUPPORTING_NOTIFICATION" {
+		t.Fatalf("unexpected result %#v, err %v", got, err)
+	}
+}
+
+func TestUnknownMerchantSafeFallback(t *testing.T) {
+	got, err := Parse(Input{SourceApp: "SeaBank", Title: "Pembayaran Berhasil", Text: "Pembayaran sebesar Rp35.000 telah berhasil"})
+	if err != nil || got == nil {
+		t.Fatalf("unexpected result %#v, err %v", got, err)
+	}
+	if got.Type != "expense" || got.Amount != 35000 || got.Merchant != "" || got.CategoryName != "Belum Dikategorikan" || got.ParseStatus != "AUTO" {
+		t.Fatalf("unexpected result for unknown merchant: %#v", got)
+	}
+}
+
 func TestGenericConservativeParsing(t *testing.T) {
 	// A Rupiah amount alone MUST NEVER create a transaction
-	got, err := Parse(Input{SourceApp: "SeaBank", Text: "Catatan sebesar Rp1.000"})
-	if err != nil {
-		t.Fatalf("unexpected error %v", err)
+	cases := []Input{
+		{SourceApp: "SeaBank", Text: "Catatan sebesar Rp1.000"},
+		{SourceApp: "SeaBank", Text: "Catatan Rp100.000 untuk besok"},
+		{SourceApp: "Unknown", Text: "Info tagihan Rp50.000 belum lunas"},
 	}
-	if got != nil && !got.Ignore {
-		t.Fatalf("expected nil or ignored result for arbitrary text with amount, got %#v", got)
+	for _, input := range cases {
+		got, err := Parse(input)
+		if err != nil {
+			t.Fatalf("unexpected error %v", err)
+		}
+		if got != nil && !got.Ignore {
+			t.Fatalf("expected nil or ignored result for arbitrary text with amount, got %#v", got)
+		}
 	}
 }

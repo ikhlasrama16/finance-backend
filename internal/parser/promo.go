@@ -51,9 +51,41 @@ var nonTransactionIndicators = []string{
 	"kini hadir",
 }
 
+var transactionIndicators = []string{
+	"pembayaran qris",
+	"pembayaran berhasil",
+	"pembayaran sukses",
+	"transaksi berhasil",
+	"transfer berhasil",
+	"berhasil dikirim",
+	"dana terkirim",
+	"kirim uang berhasil",
+	"telah berhasil",
+	"dana masuk",
+	"transfer masuk",
+	"menerima dana",
+	"uang masuk",
+	"saldo bertambah",
+	"telah masuk",
+	"top up berhasil",
+	"isi saldo berhasil",
+	"pembayaran sebesar",
+	"transfer sebesar",
+	"transfer senilai",
+	"melakukan transfer",
+	"seabank bayar instan",
+	"payment successful",
+}
+
 func isPromotion(input Input) bool {
 	text := normalizedInput(input)
-	return containsAny(text, promoIndicators...) || containsAny(text, nonTransactionIndicators...)
+	if containsAny(text, nonTransactionIndicators...) {
+		return true
+	}
+	if containsAny(text, transactionIndicators...) {
+		return false
+	}
+	return containsAny(text, promoIndicators...)
 }
 
 func promotionResult() *Result {

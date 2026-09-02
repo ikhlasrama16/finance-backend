@@ -380,13 +380,35 @@ func TestTransferBypassesAIClassifier(t *testing.T) {
 	}
 	service := &Service{classifier: fakeCls}
 	parsed := &parser.Result{Type: "transfer", Amount: 50000}
-
 	if err := service.applyCategoryRule(context.Background(), parsed); err != nil {
 		t.Fatal(err)
 	}
-
 	if fakeCls.called {
 		t.Fatalf("AI classifier must NOT be called for transfers")
+	}
+}
+
+func TestProcessNotificationWithPromoWordingSucceeds(t *testing.T) {
+	seaBank := account.Account{ID: 10, Name: "SeaBank"}
+	uncategorized := category.Category{ID: 21, Name: "Belum Dikategorikan", Type: "expense"}
+	service := &Service{
+		accountRepository:  fakeAccountResolver{accounts: map[string]account.Account{"SeaBank": seaBank}},
+		categoryRepository: fakeCategoryResolver{categories: map[string]category.Category{"Belum Dikategorikan/expense": uncategorized}},
+	}
+	parsed, parserName, err := service.parse(context.Background(), parser.Input{
+		SourceApp: "SeaBank",
+		Title:     "Pembayaran QRIS Berhasil",
+		Text:      "Pembayaran QRIS untuk WARUNG KOPI sebesar Rp25.000 telah berhasil. Nikmati voucher diskon berikutnya!",
+	})
+	if err != nil || parsed == nil || parsed.Ignore {
+		t.Fatalf("expected successful parse, got parsed=%#v, name=%s, err=%v", parsed, parserName, err)
+	}
+	resolved, err := service.resolve(context.Background(), Notification{ID: 99, ReceivedAt: mustTime("2026-08-16T12:00:00Z")}, parsed)
+	if err != nil {
+		t.Fatalf("resolve failed: %v", err)
+	}
+	if resolved.Type != "expense" || resolved.Amount != 25000 || resolved.SourceAccountID == nil || *resolved.SourceAccountID != seaBank.ID || resolved.CategoryID == nil || *resolved.CategoryID != uncategorized.ID {
+		t.Fatalf("unexpected resolved transaction: %#v", resolved)
 	}
 }
 

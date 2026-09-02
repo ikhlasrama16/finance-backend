@@ -15,6 +15,12 @@ func (r *Registry) ParseWithRules(input Input, matcher RuleMatcher) (*Result, er
 	if r == nil {
 		r = NewRegistry()
 	}
+	qris := qrisParser{}
+	if qris.CanParse(input) {
+		if result, err := qris.Parse(input); err != nil || result != nil {
+			return result, err
+		}
+	}
 	if isPromotion(input) {
 		return promotionResult(), nil
 	}
@@ -24,6 +30,9 @@ func (r *Registry) ParseWithRules(input Input, matcher RuleMatcher) (*Result, er
 		}
 	}
 	for _, p := range r.parsers {
+		if _, isQRIS := p.(qrisParser); isQRIS {
+			continue
+		}
 		if p.CanParse(input) {
 			if result, err := p.Parse(input); err != nil || result != nil {
 				return result, err

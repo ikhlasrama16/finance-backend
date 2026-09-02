@@ -4,9 +4,9 @@ import "regexp"
 
 type genericParser struct{}
 
-var genericMerchantRE = regexp.MustCompile(`(?i)(?:kepada|ke)\s+(.+?)(?:\s+pada|\s+sebesar|\.|$)`)
-var genericFromRE = regexp.MustCompile(`(?i)dari\s+(.+?)(?:\s+pada|\s+sebesar|\.|$)`)
-var genericAtRE = regexp.MustCompile(`(?i)di\s+(.+?)(?:\s+sebesar|\.|$)`)
+var genericMerchantRE = regexp.MustCompile(`(?i)\b(?:kepada|ke)\b\s+(.+?)(?:\s+pada|\s+sebesar|\.|$)`)
+var genericFromRE = regexp.MustCompile(`(?i)\bdari\b\s+(.+?)(?:\s+pada|\s+sebesar|\.|$)`)
+var genericAtRE = regexp.MustCompile(`(?i)\bdi\b\s+(.+?)(?:\s+sebesar|\.|$)`)
 
 func (genericParser) CanParse(input Input) bool { return true }
 func (genericParser) Parse(input Input) (*Result, error) {
@@ -38,7 +38,7 @@ func (genericParser) Parse(input Input) (*Result, error) {
 		if destination != "" && isOwnedAccount(source) {
 			return &Result{Type: "transfer", Amount: amount, SourceAccountName: source, DestinationAccountName: destination, ParseStatus: "AUTO", Confidence: 0.82}, nil
 		}
-		return &Result{Type: "expense", Amount: amount, SourceAccountName: sourceIfOwned(source), Merchant: merchant, ParseStatus: "NEEDS_REVIEW", Confidence: 0.82}, nil
+		return &Result{Type: "expense", Amount: amount, SourceAccountName: sourceIfOwned(source), Merchant: merchant, CategoryName: "Belum Dikategorikan", ParseStatus: "NEEDS_REVIEW", Confidence: 0.82}, nil
 	}
 	if containsAny(normalized, "pembayaran berhasil", "pembayaran sukses", "transaksi berhasil", "qris", "pembelian", "bayar", "payment successful", "debit") {
 		return &Result{Type: "expense", Amount: amount, SourceAccountName: sourceIfOwned(source), Merchant: merchant, CategoryName: "Belum Dikategorikan", ParseStatus: "AUTO", Confidence: 0.78}, nil
