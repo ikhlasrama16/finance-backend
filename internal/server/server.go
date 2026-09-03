@@ -114,6 +114,7 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 		transactionHandler.List,
 	)
 
+	mux.HandleFunc("GET /api/v1/transactions/{id}", transactionHandler.GetByID)
 	mux.HandleFunc(
 		"POST /api/v1/transactions",
 		transactionHandler.Create,
@@ -131,6 +132,7 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 		categoryHandler.Create,
 	)
 	mux.HandleFunc("POST /api/v1/reports/ai", reportHandler.Create)
+	mux.HandleFunc("GET /api/v1/notifications", notificationHandler.List)
 	var notificationRoute http.Handler = http.HandlerFunc(notificationHandler.Create)
 	notificationRoute = middleware.BearerAuth(options.IngestAPIKey)(notificationRoute)
 	mux.Handle("POST /api/v1/notifications", notificationRoute)

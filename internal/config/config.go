@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bufio"
 	"errors"
 	"os"
 	"strings"
@@ -17,7 +18,40 @@ type Config struct {
 	OpenRouterClassifierModel string
 }
 
+func loadDotEnv() {
+	paths := []string{".env", "../.env"}
+	for _, p := range paths {
+		f, err := os.Open(p)
+		if err != nil {
+			continue
+		}
+		defer f.Close()
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			if strings.HasPrefix(line, "$env:") {
+				line = strings.TrimPrefix(line, "$env:")
+			}
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			k := strings.TrimSpace(parts[0])
+			v := strings.TrimSpace(parts[1])
+			v = strings.Trim(v, `"'`)
+			if os.Getenv(k) == "" && k != "" {
+				_ = os.Setenv(k, v)
+			}
+		}
+		break
+	}
+}
+
 func Load() Config {
+	loadDotEnv()
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"

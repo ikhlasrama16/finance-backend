@@ -63,6 +63,10 @@ func (s *Service) List(ctx context.Context) ([]Transaction, error) {
 	return s.repository.List(ctx)
 }
 
+func (s *Service) GetByID(ctx context.Context, id int64) (Transaction, error) {
+	return s.getTransaction(ctx, id)
+}
+
 func (s *Service) Create(ctx context.Context, input CreateInput) (Transaction, error) {
 	if input.Amount <= 0 {
 		return Transaction{}, ErrInvalidAmount

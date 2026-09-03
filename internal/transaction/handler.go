@@ -24,6 +24,23 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "data": transactions})
 }
 
+func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
+	id, ok := transactionIDFromPath(w, r)
+	if !ok {
+		return
+	}
+	transaction, err := h.service.GetByID(r.Context(), id)
+	if errors.Is(err, ErrTransactionNotFound) {
+		writeJSON(w, http.StatusNotFound, map[string]any{"success": false, "error": "transaction not found"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"success": false, "error": "internal server error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "data": transaction})
+}
+
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var input CreateInput
 	decoder := json.NewDecoder(r.Body)

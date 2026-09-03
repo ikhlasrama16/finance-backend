@@ -102,3 +102,55 @@ func (r *Repository) Create(
 
 	return created, nil
 }
+
+func (r *Repository) List(ctx context.Context, limit int) ([]Notification, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	rows, err := r.db.Query(ctx, `
+		SELECT
+			id,
+			source_app,
+			title,
+			body,
+			received_at,
+			status,
+			parser_name,
+			fingerprint,
+			error_message,
+			transaction_id,
+			created_at
+		FROM raw_notifications
+		ORDER BY received_at DESC, id DESC
+		LIMIT $1
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list raw notifications: %w", err)
+	}
+	defer rows.Close()
+
+	notifications := make([]Notification, 0)
+	for rows.Next() {
+		var n Notification
+		if err := rows.Scan(
+			&n.ID,
+			&n.SourceApp,
+			&n.Title,
+			&n.Body,
+			&n.ReceivedAt,
+			&n.Status,
+			&n.ParserName,
+			&n.Fingerprint,
+			&n.ErrorMessage,
+			&n.TransactionID,
+			&n.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan raw notification: %w", err)
+		}
+		notifications = append(notifications, n)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate raw notifications: %w", err)
+	}
+	return notifications, nil
+}

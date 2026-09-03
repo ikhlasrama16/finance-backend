@@ -144,6 +144,10 @@ func (s *Service) Ingest(ctx context.Context, input CreateInput) (IngestionResul
 	return s.process(ctx, raw)
 }
 
+func (s *Service) List(ctx context.Context, limit int) ([]Notification, error) {
+	return s.repository.List(ctx, limit)
+}
+
 func generateFingerprint(
 	sourceApp string,
 	title *string,

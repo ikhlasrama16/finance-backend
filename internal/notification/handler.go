@@ -16,6 +16,15 @@ func NewHandler(service *Service) *Handler {
 	}
 }
 
+func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
+	notifications, err := h.service.List(r.Context(), 50)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"success": false, "error": "internal server error"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "data": notifications})
+}
+
 func (h *Handler) Create(
 	w http.ResponseWriter,
 	r *http.Request,

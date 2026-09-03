@@ -16,6 +16,7 @@ type Notification struct {
 	RawPayload   json.RawMessage `json:"raw_payload,omitempty"`
 	Fingerprint  *string         `json:"fingerprint,omitempty"`
 	ErrorMessage *string         `json:"error_message,omitempty"`
+	TransactionID *int64         `json:"transaction_id,omitempty"`
 	CreatedAt    time.Time       `json:"created_at"`
 }
 

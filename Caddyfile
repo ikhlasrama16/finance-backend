@@ -1,3 +1,8 @@
 finance.mikra.my.id {
-    reverse_proxy finance-api:8080
+    handle /api/v1/* {
+        reverse_proxy finance-api:8080
+    }
+    handle {
+        reverse_proxy finance-web:3000
+    }
 }
