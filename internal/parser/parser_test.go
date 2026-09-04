@@ -79,6 +79,20 @@ func TestSeaBankRealtimeTransferClassifiesExternalAndOwnedRecipients(t *testing.
 	}
 }
 
+func TestSeaBankIncomingFundsUsesAmountBeforeReferenceNumber(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "SeaBank",
+		Title:     "Transfer Masuk",
+		Text:      "Kamu menerima transfer saldo senilai Rp393.500 ke rekening 8380. Ref. number 20260902BBBAIDJA010O9965884434.",
+	})
+	if err != nil || got == nil {
+		t.Fatalf("got %#v, err %v", got, err)
+	}
+	if got.Type != "income" || got.Amount != 393500 || got.DestinationAccountName != "SeaBank" {
+		t.Fatalf("unexpected result %#v", got)
+	}
+}
+
 func TestAccountMappingAndDetection(t *testing.T) {
 	for source, want := range map[string]string{"seabank": "SeaBank", "shopeepay": "ShopeePay", "jago": "Bank Jago", "livin": "Mandiri", "brimo": "BRI", "shopee": "Shopee"} {
 		if got := accountFromSource(source); got != want {
@@ -173,6 +187,17 @@ func TestMustFailSafelyIncompleteTransfer(t *testing.T) {
 func TestShopeePaySupportingTopUpIgnored(t *testing.T) {
 	got, err := Parse(Input{SourceApp: "ShopeePay", Title: "Isi Saldo Berhasil", Text: "Pengisian saldo sebesar Rp10.000 telah ditambahkan ke ShopeePay-mu. Saldo saat ini sebesar Rp10.050."})
 	if err != nil || got == nil || !got.Ignore || got.ParseStatus != "IGNORED_SUPPORTING_NOTIFICATION" {
+		t.Fatalf("unexpected result %#v, err %v", got, err)
+	}
+}
+
+func TestShopeePayQRISCashbackPromotionIsIgnored(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "ShopeePay",
+		Title:     "Saldo s.d. Rp100.000: KLAIM👉",
+		Text:      "Transaksi QRIS pasti dapat s.d. 100RB! Ambil cashback saldonya 🏃💨",
+	})
+	if err != nil || got == nil || !got.Ignore || got.ParseStatus != "IGNORED_PROMO" {
 		t.Fatalf("unexpected result %#v, err %v", got, err)
 	}
 }

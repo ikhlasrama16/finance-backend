@@ -30,6 +30,8 @@ var promoIndicators = []string{
 	"buruan",
 	"lindungi diri",
 	"saldo kaget",
+	"pasti dapat",
+	"ambil cashback",
 }
 
 var nonTransactionIndicators = []string{

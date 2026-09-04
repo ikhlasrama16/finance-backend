@@ -40,7 +40,7 @@ func (genericParser) Parse(input Input) (*Result, error) {
 		}
 		return &Result{Type: "expense", Amount: amount, SourceAccountName: sourceIfOwned(source), Merchant: merchant, CategoryName: "Belum Dikategorikan", ParseStatus: "NEEDS_REVIEW", Confidence: 0.82}, nil
 	}
-	if containsAny(normalized, "pembayaran berhasil", "pembayaran sukses", "transaksi berhasil", "qris", "pembelian", "bayar", "payment successful", "debit") {
+	if containsAny(normalized, "pembayaran berhasil", "pembayaran sukses", "transaksi berhasil", "pembelian", "bayar", "payment successful", "debit") {
 		return &Result{Type: "expense", Amount: amount, SourceAccountName: sourceIfOwned(source), Merchant: merchant, CategoryName: "Belum Dikategorikan", ParseStatus: "AUTO", Confidence: 0.78}, nil
 	}
 	if containsAny(normalized, "gaji", "salary", "payroll", "bonus", "pendapatan", "cashback diterima") {
