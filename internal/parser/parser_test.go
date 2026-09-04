@@ -93,6 +93,20 @@ func TestSeaBankIncomingFundsUsesAmountBeforeReferenceNumber(t *testing.T) {
 	}
 }
 
+func TestLivinIncomingFundsWithAmountBetweenDanaAndMasuk(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "Livin' by Mandiri",
+		Title:     "Ini Dia Transaksi Terbaru Anda",
+		Text:      "Dana Rp 20.000,00 masuk ke rek. ****2071. Login ke Livin' by Mandiri untuk cek Mutasi Transaksi.",
+	})
+	if err != nil || got == nil {
+		t.Fatalf("got %#v, err %v", got, err)
+	}
+	if got.Type != "income" || got.Amount != 20000 || got.DestinationAccountName != "Mandiri" || got.CategoryName != "Pemasukan" {
+		t.Fatalf("unexpected result %#v", got)
+	}
+}
+
 func TestAccountMappingAndDetection(t *testing.T) {
 	for source, want := range map[string]string{"seabank": "SeaBank", "shopeepay": "ShopeePay", "jago": "Bank Jago", "livin": "Mandiri", "brimo": "BRI", "shopee": "Shopee"} {
 		if got := accountFromSource(source); got != want {

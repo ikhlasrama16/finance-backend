@@ -7,6 +7,7 @@ type genericParser struct{}
 var genericMerchantRE = regexp.MustCompile(`(?i)\b(?:kepada|ke)\b\s+(.+?)(?:\s+pada|\s+sebesar|\.|$)`)
 var genericFromRE = regexp.MustCompile(`(?i)\bdari\b\s+(.+?)(?:\s+pada|\s+sebesar|\.|$)`)
 var genericAtRE = regexp.MustCompile(`(?i)\bdi\b\s+(.+?)(?:\s+sebesar|\.|$)`)
+var genericIncomingFundsRE = regexp.MustCompile(`(?is)\bdana\b.{0,80}\bmasuk\b`)
 
 func (genericParser) CanParse(input Input) bool { return true }
 func (genericParser) Parse(input Input) (*Result, error) {
@@ -27,7 +28,7 @@ func (genericParser) Parse(input Input) (*Result, error) {
 	if owned := detectOwnedAccount(merchant); owned != "" {
 		destination = owned
 	}
-	if containsAny(normalized, "dana masuk", "transfer masuk", "menerima dana", "uang masuk", "saldo bertambah", "isi saldo berhasil", "top up berhasil") {
+	if genericIncomingFundsRE.MatchString(text) || containsAny(normalized, "transfer masuk", "menerima dana", "uang masuk", "saldo bertambah", "isi saldo berhasil", "top up berhasil") {
 		from := capture(genericFromRE, text)
 		if owned := detectOwnedAccount(from); owned != "" && isOwnedAccount(source) && owned != source {
 			return &Result{Type: "transfer", Amount: amount, SourceAccountName: owned, DestinationAccountName: source, ParseStatus: "AUTO", Confidence: 0.85}, nil
