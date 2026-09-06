@@ -63,7 +63,7 @@ type AIJob struct {
 	SnapshotHash    string     `json:"snapshot_hash"`
 	Model           string     `json:"model"`
 	Content         *string    `json:"content,omitempty"`
-	ErrorCode       string     `json:"error_code,omitempty"`
+	ErrorCode       *string    `json:"error_code,omitempty"`
 	CreatedAt       time.Time  `json:"created_at"`
 	CompletedAt     *time.Time `json:"completed_at,omitempty"`
 	Prompt          string     `json:"-"`

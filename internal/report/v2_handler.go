@@ -3,6 +3,7 @@ package report
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 )
 
@@ -66,5 +67,6 @@ func (h *V2Handler) writeError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "error": err.Error()})
 		return
 	}
+	log.Printf("[report_v2] internal server error: %v", err)
 	writeJSON(w, http.StatusInternalServerError, map[string]any{"success": false, "error": "internal server error"})
 }
