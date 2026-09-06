@@ -16,6 +16,8 @@ type Config struct {
 	OpenRouterAPIKey          string
 	OpenRouterModel           string
 	OpenRouterClassifierModel string
+	AuthBootstrapEmail        string
+	AuthBootstrapPassword     string
 }
 
 func loadDotEnv() {
@@ -84,6 +86,8 @@ func Load() Config {
 		OpenRouterAPIKey:          os.Getenv("OPENROUTER_API_KEY"),
 		OpenRouterModel:           openRouterModel,
 		OpenRouterClassifierModel: openRouterClassifierModel,
+		AuthBootstrapEmail:        os.Getenv("AUTH_BOOTSTRAP_EMAIL"),
+		AuthBootstrapPassword:     os.Getenv("AUTH_BOOTSTRAP_PASSWORD"),
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"finance-monitor/backend/internal/account"
+	"finance-monitor/backend/internal/auth"
 	"finance-monitor/backend/internal/category"
 	"finance-monitor/backend/internal/middleware"
 	"finance-monitor/backend/internal/notification"
@@ -30,6 +31,8 @@ type Options struct {
 	OpenRouterAPIKey          string
 	OpenRouterModel           string
 	OpenRouterClassifierModel string
+	AuthBootstrapEmail        string
+	AuthBootstrapPassword     string
 }
 
 func New(
@@ -79,6 +82,9 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 		notificationService,
 	)
 	reportRepository := report.NewRepository(db)
+	authRepository := auth.NewRepository(db)
+	authService := auth.NewService(authRepository)
+	authHandler := auth.NewHandler(authService, options.AppEnv == "production")
 	reportClient := report.NewOpenRouterClient(options.OpenRouterAPIKey, options.OpenRouterModel)
 	reportService := report.NewService(reportRepository, reportClient)
 	reportHandler := report.NewHandler(reportService)
@@ -96,6 +102,9 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 	})
 
 	mux.HandleFunc("GET /api/v1/ready", readinessHandler(db.Ping))
+	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
+	mux.HandleFunc("POST /api/v1/auth/logout", authHandler.Logout)
+	mux.HandleFunc("GET /api/v1/auth/me", authHandler.Me)
 
 	mux.HandleFunc(
 		"GET /api/v1/accounts",
@@ -144,7 +153,8 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 	mux.Handle("POST /api/v1/notifications", notificationRoute)
 
 	development := options.AppEnv != "production"
-	handler := middleware.CORS(options.CORSAllowedOrigins, development)(mux)
+	var handler http.Handler = auth.RequireSession(authService)(mux)
+	handler = middleware.CORS(options.CORSAllowedOrigins, development)(handler)
 
 	return &Server{
 		httpServer: &http.Server{
