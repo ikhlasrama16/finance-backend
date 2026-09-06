@@ -18,8 +18,9 @@ import (
 )
 
 type Server struct {
-	httpServer *http.Server
-	db         *pgxpool.Pool
+	httpServer   *http.Server
+	db           *pgxpool.Pool
+	reportWorker *report.Worker
 }
 
 type Options struct {
@@ -81,6 +82,8 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 	reportClient := report.NewOpenRouterClient(options.OpenRouterAPIKey, options.OpenRouterModel)
 	reportService := report.NewService(reportRepository, reportClient)
 	reportHandler := report.NewHandler(reportService)
+	reportV2Service := report.NewV2Service(reportRepository, reportClient)
+	reportV2Handler := report.NewV2Handler(reportV2Service)
 
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -132,6 +135,9 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 		categoryHandler.Create,
 	)
 	mux.HandleFunc("POST /api/v1/reports/ai", reportHandler.Create)
+	mux.HandleFunc("GET /api/v2/reports/statistics", reportV2Handler.Statistics)
+	mux.HandleFunc("POST /api/v2/reports/ai", reportV2Handler.CreateAIJob)
+	mux.HandleFunc("GET /api/v2/reports/ai/{id}", reportV2Handler.GetAIJob)
 	mux.HandleFunc("GET /api/v1/notifications", notificationHandler.List)
 	var notificationRoute http.Handler = http.HandlerFunc(notificationHandler.Create)
 	notificationRoute = middleware.BearerAuth(options.IngestAPIKey)(notificationRoute)
@@ -149,7 +155,7 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 			WriteTimeout:      60 * time.Second,
 			IdleTimeout:       60 * time.Second,
 		},
-		db: db,
+		db: db, reportWorker: report.NewWorker(reportRepository, reportClient),
 	}
 }
 
@@ -173,6 +179,11 @@ func (s *Server) Run() error {
 }
 
 func (s *Server) RunContext(ctx context.Context) error {
+	workerCtx, cancelWorker := context.WithCancel(ctx)
+	defer cancelWorker()
+	if s.reportWorker != nil {
+		go s.reportWorker.Run(workerCtx)
+	}
 	errors := make(chan error, 1)
 	go func() { errors <- s.httpServer.ListenAndServe() }()
 	select {
