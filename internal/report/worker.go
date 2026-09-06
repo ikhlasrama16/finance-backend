@@ -2,6 +2,7 @@ package report
 
 import (
 	"context"
+	"log"
 	"time"
 )
 
@@ -50,7 +51,9 @@ func (w *Worker) ProcessOne(ctx context.Context) (bool, error) {
 	content, generationErr := w.generator.Generate(generationCtx, job.Prompt)
 	cancel()
 	if generationErr != nil {
+		log.Printf("[ai_worker] job %s failed attempt %d/%d: %v", job.ID, job.Attempts, job.MaxAttempts, generationErr)
 		return true, w.repository.RetryOrFailAIJob(ctx, job)
 	}
+	log.Printf("[ai_worker] job %s completed successfully", job.ID)
 	return true, w.repository.CompleteAIJob(ctx, job.ID, content)
 }
