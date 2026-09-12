@@ -250,3 +250,68 @@ func TestGenericConservativeParsing(t *testing.T) {
 		}
 	}
 }
+
+func TestShopeePayBiFastTransferIn(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "ShopeePay",
+		Title:     "Saldo ShopeePay diterima!",
+		Text:      "HIELMI SULAEMAN mengirimkan dana sebesar Rp20.000 ke ShopeePay-mu melalui BI-Fast.",
+	})
+	if err != nil || got == nil {
+		t.Fatalf("unexpected result %#v, err %v", got, err)
+	}
+	if got.Type != "income" || got.Amount != 20000 || got.DestinationAccountName != "ShopeePay" || got.Merchant != "HIELMI SULAEMAN" {
+		t.Fatalf("unexpected values: %#v", got)
+	}
+}
+
+func TestShopeeRefund(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "Shopee",
+		Title:     "Permintaan Pengembalian Barang Disetujui",
+		Text:      "Pengajuan Pengembalian Dana 2609100NMXFHD81 disetujui. Pengembalian Dana sebesar Rp 151.200 akan dikembalikan ke ShopeePay Balance-mu dalam 1 hari kerja.",
+	})
+	if err != nil || got == nil {
+		t.Fatalf("unexpected result %#v, err %v", got, err)
+	}
+	if got.Type != "income" || got.Amount != 151200 || got.DestinationAccountName != "ShopeePay" {
+		t.Fatalf("unexpected values: %#v", got)
+	}
+}
+
+func TestFailedTransactionIgnored(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "ShopeePay",
+		Title:     "Pembayaran ke Spotify Premium ID gagal",
+		Text:      "Pembayaran sebesar Rp59.900 gagal karena saldo tidak cukup. Isi saldo atau tambahkan SPayLater agar pembayaran berhasil.",
+	})
+	if err != nil || got == nil || !got.Ignore {
+		t.Fatalf("expected failed transaction to be ignored, got %#v, err %v", got, err)
+	}
+}
+
+func TestSPayLaterConfirmationIgnored(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "Shopee",
+		Title:     "SPayLater",
+		Text:      "Congrats! Your SPayLater bill payment has been received and your limit will be restored soon.",
+	})
+	if err != nil || got == nil || !got.Ignore {
+		t.Fatalf("expected SPayLater confirmation to be ignored, got %#v, err %v", got, err)
+	}
+}
+
+func TestSeaBankRealtimeTransferWithoutRecipient(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "SeaBank",
+		Title:     "Realtime Transfer",
+		Text:      "Kamu baru melakukan transfer real-time senilai Rp70.000 pada 21 Aug 2026 11:24. Jika kamu tidak melakukan ini, segera hubungi 1500130.",
+	})
+	if err != nil || got == nil {
+		t.Fatalf("unexpected result %#v, err %v", got, err)
+	}
+	if got.Type != "expense" || got.Amount != 70000 || got.SourceAccountName != "SeaBank" || got.CategoryName != "Belum Dikategorikan" {
+		t.Fatalf("unexpected values: %#v", got)
+	}
+}
+

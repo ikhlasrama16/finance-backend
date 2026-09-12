@@ -44,7 +44,10 @@ func (seaBankParser) Parse(input Input) (*Result, error) {
 				Type:              "expense",
 				Amount:            amount,
 				SourceAccountName: "SeaBank",
-				ParseStatus:       "FAILED",
+				CategoryName:      "Belum Dikategorikan",
+				Description:       "Realtime Transfer SeaBank",
+				ParseStatus:       "AUTO",
+				Confidence:        0.85,
 			}, nil
 		}
 		if owned := detectOwnedAccount(merchant); owned != "" && owned != "SeaBank" {
