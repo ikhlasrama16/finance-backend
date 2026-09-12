@@ -44,6 +44,9 @@ func TestPromotionPrecedence(t *testing.T) {
 		{"Touch ID", Input{SourceApp: "SeaBank", Title: "Touch ID Berhasil Diaktifkan"}, true},
 		{"Shopee Chat", Input{SourceApp: "Shopee", Text: "Kamu mendapat chat baru"}, true},
 		{"Shopee Driver", Input{SourceApp: "Shopee", Text: "Pengemudi hampir tiba!"}, true},
+		{"ShopeePay Ada Saldo s.d. Promo", Input{SourceApp: "ShopeePay", Title: "Ada saldo s.d. Rp100.000 untuk ikhlasramadhan😉", Text: "Bayar apapun pakai QRIS bisa dapat saldo s.d 100RB loh! Transaksi sekarang 👉"}, true},
+		{"ShopeePay Pinjaman Tunai", Input{SourceApp: "ShopeePay", Title: "Pinjaman Tunai Siap Cair🥰", Text: "ikhlasramadhan, kamu bisa ajuin pinjaman tunai dengan bunga mulai 0.06% dan limit s.d. 100 juta! Cek limitmu👉"}, true},
+		{"ShopeePay AMBIL Cashback", Input{SourceApp: "ShopeePay", Title: "AMBIL: Cashback s.d. Rp100.000💰", Text: "Bayar QRIS dijamin dapat s.d 100RB! Belanja sekarang👉"}, true},
 		{"cashback transaction", Input{Title: "Pembayaran berhasil dapat cashback", Text: "Pembayaran sebesar Rp50.000 berhasil dapat cashback"}, false},
 		{"QRIS with promo", Input{SourceApp: "SeaBank", Title: "Pembayaran QRIS Berhasil", Text: "Pembayaran QRIS untuk WARUNG MAKMUR sebesar Rp25.000 telah berhasil. Dapatkan diskon khusus untukmu!"}, false},
 	}
