@@ -11,6 +11,10 @@ var accountMappings = []struct{ key, name string }{
 	{"flip", "Flip"}, {"tokopedia", "Tokopedia"}, {"shopee", "Shopee"},
 }
 
+func AccountFromSource(source string) string {
+	return accountFromSource(source)
+}
+
 func accountFromSource(source string) string {
 	s := normalizeText(source)
 	if s == "" {
@@ -24,6 +28,10 @@ func accountFromSource(source string) string {
 	return strings.TrimSpace(source)
 }
 
+func DetectOwnedAccount(value string) string {
+	return detectOwnedAccount(value)
+}
+
 func detectOwnedAccount(value string) string {
 	for _, name := range []string{"ShopeePay", "SeaBank", "Bank Jago", "Mandiri", "BRI", "Flip"} {
 		pattern := `(?i)(^|[^a-z])` + regexp.QuoteMeta(name) + `([^a-z]|$)`
@@ -32,6 +40,10 @@ func detectOwnedAccount(value string) string {
 		}
 	}
 	return ""
+}
+
+func IsOwnedAccount(name string) bool {
+	return isOwnedAccount(name)
 }
 
 func isOwnedAccount(name string) bool {

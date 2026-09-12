@@ -21,6 +21,12 @@ func (s *Service) process(ctx context.Context, raw Notification) (IngestionResul
 	if err != nil {
 		return s.failed(ctx, raw, "parser error", parserName)
 	}
+	if parsed == nil && s.aiParser != nil {
+		if aiResult, aiErr := s.aiParser.ParseNotification(ctx, input); aiErr == nil && aiResult != nil {
+			parsed = aiResult
+			parserName = "ai_parser"
+		}
+	}
 	if parsed == nil {
 		return s.failed(ctx, raw, "notification format not recognized", parserName)
 	}

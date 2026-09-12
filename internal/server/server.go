@@ -68,6 +68,7 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 		classifierModel = options.OpenRouterModel
 	}
 	classifier := category.NewOpenRouterClassifier(options.OpenRouterAPIKey, classifierModel)
+	aiFallbackParser := notification.NewOpenRouterAIFallbackParser(options.OpenRouterAPIKey, classifierModel)
 
 	notificationService := notification.NewProcessingService(
 		db,
@@ -76,7 +77,7 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 		categoryRepository,
 		transactionRepository,
 		ruleRepository,
-	).WithClassifier(classifier)
+	).WithClassifier(classifier).WithAIFallbackParser(aiFallbackParser)
 
 	notificationHandler := notification.NewHandler(
 		notificationService,

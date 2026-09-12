@@ -33,6 +33,7 @@ type Service struct {
 	transactionRepository parsedTransactionRepository
 	ruleRepository        ruleRepository
 	classifier            category.Classifier
+	aiParser              AIFallbackParser
 }
 
 type accountResolver interface {
@@ -68,6 +69,11 @@ func NewProcessingService(db *pgxpool.Pool, repository *Repository, accountRepos
 
 func (s *Service) WithClassifier(classifier category.Classifier) *Service {
 	s.classifier = classifier
+	return s
+}
+
+func (s *Service) WithAIFallbackParser(aiParser AIFallbackParser) *Service {
+	s.aiParser = aiParser
 	return s
 }
 

@@ -412,4 +412,65 @@ func TestProcessNotificationWithPromoWordingSucceeds(t *testing.T) {
 	}
 }
 
+type fakeAIFallbackParser struct {
+	result *parser.Result
+	err    error
+	called bool
+}
+
+func (f *fakeAIFallbackParser) ParseNotification(_ context.Context, _ parser.Input) (*parser.Result, error) {
+	f.called = true
+	return f.result, f.err
+}
+
+func TestProcessAIFallbackWhenDeterministicParserReturnsNil(t *testing.T) {
+	fakeAI := &fakeAIFallbackParser{
+		result: &parser.Result{
+			Type:              "expense",
+			Amount:            88000,
+			SourceAccountName: "SeaBank",
+			Merchant:          "TOKO UNIK",
+			ParseStatus:       "AUTO",
+			Confidence:        0.95,
+		},
+	}
+	seaBank := account.Account{ID: 10, Name: "SeaBank"}
+	uncategorized := category.Category{ID: 21, Name: "Belum Dikategorikan", Type: "expense"}
+	service := &Service{
+		aiParser:           fakeAI,
+		accountRepository:  fakeAccountResolver{accounts: map[string]account.Account{"SeaBank": seaBank}},
+		categoryRepository: fakeCategoryResolver{categories: map[string]category.Category{"Belum Dikategorikan/expense": uncategorized}},
+	}
+
+	input := parser.Input{
+		SourceApp: "SeaBank",
+		Title:     "Format Notifikasi Asing Baru",
+		Text:      "Ada pemotongan dana 88rb untuk TOKO UNIK",
+	}
+
+	parsed, parserName, err := service.parse(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed != nil {
+		t.Fatalf("expected deterministic parser to return nil for unknown format, got %#v", parsed)
+	}
+
+	// Now simulate the fallback step in process
+	if parsed == nil && service.aiParser != nil {
+		res, aiErr := service.aiParser.ParseNotification(context.Background(), input)
+		if aiErr == nil && res != nil {
+			parsed = res
+			parserName = "ai_parser"
+		}
+	}
+
+	if !fakeAI.called {
+		t.Fatalf("expected AI parser to be called")
+	}
+	if parsed == nil || parserName != "ai_parser" || parsed.Amount != 88000 {
+		t.Fatalf("unexpected parsed result from AI fallback: %#v", parsed)
+	}
+}
+
 func mustTime(value string) (result time.Time) { result, _ = time.Parse(time.RFC3339, value); return }
