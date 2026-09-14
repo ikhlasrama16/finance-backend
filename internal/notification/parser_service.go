@@ -117,7 +117,10 @@ func (s *Service) parse(ctx context.Context, input parser.Input) (*parser.Result
 }
 
 func (s *Service) applyCategoryRule(ctx context.Context, result *parser.Result) error {
-	if result.Type != "expense" && result.Type != "income" {
+	// Category rules are merchant-spending rules. Applying one to income can
+	// replace the parser's income category with an expense category when the
+	// sender name happens to match a previously learned merchant rule.
+	if result.Type != "expense" {
 		return nil
 	}
 

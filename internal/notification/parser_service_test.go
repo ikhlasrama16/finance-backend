@@ -388,6 +388,39 @@ func TestTransferBypassesAIClassifier(t *testing.T) {
 	}
 }
 
+func TestSeaBankIncomingTransferKeepsIncomeCategoryWhenSenderMatchesExpenseRule(t *testing.T) {
+	pemasukan := category.Category{ID: 20, Name: "Pemasukan", Type: "income"}
+	expenseCategory := category.Category{ID: 21, Name: "Makanan & Minuman", Type: "expense"}
+	service := &Service{
+		categoryRepository: fakeCategoryResolver{categories: map[string]category.Category{
+			"Pemasukan/income":          pemasukan,
+			"Makanan & Minuman/expense": expenseCategory,
+		}},
+		ruleRepository: &fakeRuleRepository{categoryRules: []rule.CategoryRule{
+			{ID: 7, Keyword: "AGUSTIN CHANDRA MAHARDHIKA", CategoryID: expenseCategory.ID, Confidence: 1, Priority: 1},
+		}},
+	}
+
+	parsed, err := parser.Parse(parser.Input{
+		SourceApp: "SeaBank",
+		Title:     "Transfer Masuk",
+		Text:      "Kamu menerima transfer saldo senilai Rp36.000 dari AGUSTIN CHANDRA MAHARDHIKA.",
+	})
+	if err != nil || parsed == nil {
+		t.Fatalf("parse incoming transfer: result=%#v err=%v", parsed, err)
+	}
+	if parsed.Type != "income" || parsed.CategoryName != "Pemasukan" {
+		t.Fatalf("unexpected parser result: %#v", parsed)
+	}
+
+	if err := service.applyCategoryRule(context.Background(), parsed); err != nil {
+		t.Fatalf("apply category rule: %v", err)
+	}
+	if parsed.CategoryID != nil || parsed.CategoryName != "Pemasukan" {
+		t.Fatalf("income category must not be replaced by an expense rule: %#v", parsed)
+	}
+}
+
 func TestProcessNotificationWithPromoWordingSucceeds(t *testing.T) {
 	seaBank := account.Account{ID: 10, Name: "SeaBank"}
 	uncategorized := category.Category{ID: 21, Name: "Belum Dikategorikan", Type: "expense"}
