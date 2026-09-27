@@ -28,14 +28,14 @@ func (genericParser) Parse(input Input) (*Result, error) {
 	if owned := detectOwnedAccount(merchant); owned != "" {
 		destination = owned
 	}
-	if genericIncomingFundsRE.MatchString(text) || containsAny(normalized, "transfer masuk", "menerima dana", "uang masuk", "saldo bertambah", "isi saldo berhasil", "top up berhasil") {
+	if genericIncomingFundsRE.MatchString(text) || containsAny(normalized, "transfer masuk", "menerima dana", "menerima transfer", "menerima uang", "uang masuk", "saldo bertambah", "isi saldo berhasil", "top up berhasil") {
 		from := capture(genericFromRE, text)
 		if owned := detectOwnedAccount(from); owned != "" && isOwnedAccount(source) && owned != source {
 			return &Result{Type: "transfer", Amount: amount, SourceAccountName: owned, DestinationAccountName: source, ParseStatus: "AUTO", Confidence: 0.85}, nil
 		}
 		return &Result{Type: "income", Amount: amount, DestinationAccountName: sourceIfOwned(source), Merchant: from, CategoryName: "Pemasukan", ParseStatus: "AUTO", Confidence: 0.85}, nil
 	}
-	if containsAny(normalized, "transfer berhasil", "berhasil dikirim", "dana terkirim", "transfer keluar", "kirim uang berhasil") {
+	if containsAny(normalized, "transfer berhasil", "berhasil dikirim", "dana terkirim", "transfer keluar", "kirim uang berhasil", "melakukan transfer") {
 		if destination != "" && isOwnedAccount(source) {
 			return &Result{Type: "transfer", Amount: amount, SourceAccountName: source, DestinationAccountName: destination, ParseStatus: "AUTO", Confidence: 0.82}, nil
 		}

@@ -318,3 +318,102 @@ func TestSeaBankRealtimeTransferWithoutRecipient(t *testing.T) {
 	}
 }
 
+func TestJagoTransferOutToExternal(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "Jago",
+		Title:     "Jago",
+		Text:      "Kamu telah melakukan transfer Rp178.500 ke DHEVIA LEUYS THIAQUFYAN. Butuh bantuan? Silakan Tanya Jago di 1500 746.",
+	})
+	if err != nil || got == nil {
+		t.Fatalf("unexpected result %#v, err %v", got, err)
+	}
+	if got.Type != "expense" || got.Amount != 178500 || got.SourceAccountName != "Bank Jago" || got.Merchant != "DHEVIA LEUYS THIAQUFYAN" || got.CategoryName != "Belum Dikategorikan" {
+		t.Fatalf("unexpected values: %#v", got)
+	}
+}
+
+func TestJagoTransferOutToOwnedAccount(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "Jago",
+		Title:     "Jago",
+		Text:      "Kamu telah melakukan transfer Rp50.000 ke SeaBank. Butuh bantuan? Silakan Tanya Jago di 1500 746.",
+	})
+	if err != nil || got == nil {
+		t.Fatalf("unexpected result %#v, err %v", got, err)
+	}
+	if got.Type != "transfer" || got.Amount != 50000 || got.SourceAccountName != "Bank Jago" || got.DestinationAccountName != "SeaBank" {
+		t.Fatalf("unexpected values: %#v", got)
+	}
+}
+
+func TestJagoIncomingFundsFromExternal(t *testing.T) {
+	tests := []struct {
+		name, text, sender string
+		amount             int64
+	}{
+		{
+			name:   "menerima transfer",
+			text:   "Kamu menerima transfer Rp100.000 dari BUDI SANTOSO. Butuh bantuan? Silakan Tanya Jago di 1500 746.",
+			sender: "BUDI SANTOSO",
+			amount: 100000,
+		},
+		{
+			name:   "menerima uang",
+			text:   "Kamu menerima uang Rp250.000 dari SITI AMINAH. Butuh bantuan? Silakan Tanya Jago di 1500 746.",
+			sender: "SITI AMINAH",
+			amount: 250000,
+		},
+		{
+			name:   "uang masuk ke kantong utama",
+			text:   "Uang masuk sebesar Rp75.000 dari AHMAD ke Kantong Utama kamu.",
+			sender: "AHMAD",
+			amount: 75000,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Parse(Input{
+				SourceApp: "Jago",
+				Title:     "Jago",
+				Text:      tt.text,
+			})
+			if err != nil || got == nil {
+				t.Fatalf("unexpected result %#v, err %v", got, err)
+			}
+			if got.Type != "income" || got.Amount != tt.amount || got.DestinationAccountName != "Bank Jago" || got.Merchant != tt.sender || got.CategoryName != "Pemasukan" {
+				t.Fatalf("unexpected values: %#v", got)
+			}
+		})
+	}
+}
+
+func TestJagoIncomingFundsFromOwnedAccount(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "Jago",
+		Title:     "Jago",
+		Text:      "Kamu menerima transfer Rp50.000 dari SeaBank. Butuh bantuan? Silakan Tanya Jago di 1500 746.",
+	})
+	if err != nil || got == nil {
+		t.Fatalf("unexpected result %#v, err %v", got, err)
+	}
+	if got.Type != "transfer" || got.Amount != 50000 || got.SourceAccountName != "SeaBank" || got.DestinationAccountName != "Bank Jago" {
+		t.Fatalf("unexpected values: %#v", got)
+	}
+}
+
+func TestGenericMelakukanTransfer(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "UnknownApp",
+		Title:     "Info",
+		Text:      "Kamu telah melakukan transfer Rp80.000 ke BUKALAPAK pada 26/09/2026.",
+	})
+	if err != nil || got == nil {
+		t.Fatalf("unexpected result %#v, err %v", got, err)
+	}
+	if got.Type != "expense" || got.Amount != 80000 || got.Merchant != "BUKALAPAK" {
+		t.Fatalf("unexpected values: %#v", got)
+	}
+}
+
+
+
