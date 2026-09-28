@@ -37,9 +37,35 @@ func TestCalculateExcludesTransfersAndReconciliation(t *testing.T) {
 }
 
 func TestBuildComparison(t *testing.T) {
-	comparison := BuildComparison(Statistics{Summary: Summary{Expense: 120}}, Statistics{Summary: Summary{Expense: 100}})
+	comparison := BuildComparison(
+		Statistics{Summary: Summary{Expense: 120, Income: 200, NetCashflow: 80}},
+		Statistics{Summary: Summary{Expense: 100, Income: 150, NetCashflow: 50}},
+	)
 	if comparison.PreviousPeriodExpense != 100 || comparison.ExpenseChangeAmount != 20 || comparison.ExpenseChangePercentage != 20 {
-		t.Fatalf("comparison = %+v", comparison)
+		t.Fatalf("expense comparison = %+v", comparison)
+	}
+	if comparison.PreviousPeriodIncome != 150 || comparison.IncomeChangeAmount != 50 || comparison.IncomeChangePercentage < 33.3 || comparison.NetCashflowChangeAmount != 30 {
+		t.Fatalf("income comparison = %+v", comparison)
+	}
+}
+
+func TestCalculateIncludesIncomeCategoriesAndSources(t *testing.T) {
+	start := time.Date(2026, 8, 1, 0, 0, 0, 0, jakartaLocation)
+	end := start.AddDate(0, 0, 2)
+	statistics := Calculate([]TransactionRecord{
+		{Type: "income", Amount: 5000, Source: "manual", CategoryName: "Gaji", Merchant: "PT Tech Indo"},
+		{Type: "income", Amount: 1000, Source: "manual", CategoryName: "Freelance", Merchant: "Klien B"},
+		{Type: "income", Amount: 2000, Source: "manual", CategoryName: "Gaji", Merchant: "PT Tech Indo"},
+	}, start, end)
+
+	if len(statistics.IncomeByCategory) != 2 {
+		t.Fatalf("expected 2 income categories, got %+v", statistics.IncomeByCategory)
+	}
+	if statistics.IncomeByCategory[0].Category != "Gaji" || statistics.IncomeByCategory[0].Amount != 7000 || statistics.IncomeByCategory[0].Percentage != 87.5 {
+		t.Fatalf("unexpected top income category: %+v", statistics.IncomeByCategory[0])
+	}
+	if len(statistics.TopIncomeSources) != 2 || statistics.TopIncomeSources[0].Merchant != "PT Tech Indo" || statistics.TopIncomeSources[0].Amount != 7000 {
+		t.Fatalf("unexpected top income source: %+v", statistics.TopIncomeSources)
 	}
 }
 

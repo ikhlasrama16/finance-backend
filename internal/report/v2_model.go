@@ -44,7 +44,9 @@ type StatisticsResponse struct {
 	ComparisonMode    string          `json:"comparison_mode"`
 	Summary           Summary         `json:"summary"`
 	ExpenseByCategory []CategoryTotal `json:"expense_by_category"`
+	IncomeByCategory  []CategoryTotal `json:"income_by_category"`
 	TopMerchants      []MerchantTotal `json:"top_merchants"`
+	TopIncomeSources  []MerchantTotal `json:"top_income_sources"`
 	Comparison        *Comparison     `json:"comparison,omitempty"`
 	SnapshotHash      string          `json:"snapshot_hash"`
 }

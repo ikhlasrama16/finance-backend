@@ -77,7 +77,12 @@ func (r *Repository) SaveCache(ctx context.Context, period Period, summaryHash, 
 }
 
 func (r *Repository) LoadAggregatedStatistics(ctx context.Context, start, endExclusive time.Time) (Statistics, error) {
-	statistics := Statistics{ExpenseByCategory: make([]CategoryTotal, 0), TopMerchants: make([]MerchantTotal, 0)}
+	statistics := Statistics{
+		ExpenseByCategory: make([]CategoryTotal, 0),
+		IncomeByCategory:  make([]CategoryTotal, 0),
+		TopMerchants:      make([]MerchantTotal, 0),
+		TopIncomeSources:  make([]MerchantTotal, 0),
+	}
 	err := r.db.QueryRow(ctx, `
 		SELECT
 			COALESCE(SUM(amount) FILTER (WHERE source <> 'reconcile' AND type = 'income'), 0),
@@ -101,6 +106,7 @@ func (r *Repository) LoadAggregatedStatistics(ctx context.Context, start, endExc
 		statistics.Summary.AverageDailyExpense = statistics.Summary.Expense / int64(days)
 	}
 
+	// 1. Expense by category
 	rows, err := r.db.Query(ctx, `
 		SELECT COALESCE(NULLIF(BTRIM(c.name), ''), 'Belum Dikategorikan'), SUM(t.amount)
 		FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
@@ -126,6 +132,33 @@ func (r *Repository) LoadAggregatedStatistics(ctx context.Context, start, endExc
 	}
 	rows.Close()
 
+	// 2. Income by category
+	incomeRows, err := r.db.Query(ctx, `
+		SELECT COALESCE(NULLIF(BTRIM(c.name), ''), 'Belum Dikategorikan'), SUM(t.amount)
+		FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
+		WHERE t.occurred_at >= $1 AND t.occurred_at < $2 AND t.source <> 'reconcile' AND t.type = 'income'
+		GROUP BY 1 ORDER BY 2 DESC, 1 ASC
+	`, start, endExclusive)
+	if err != nil {
+		return Statistics{}, fmt.Errorf("aggregate report income categories: %w", err)
+	}
+	defer incomeRows.Close()
+	for incomeRows.Next() {
+		var value CategoryTotal
+		if err := incomeRows.Scan(&value.Category, &value.Amount); err != nil {
+			return Statistics{}, fmt.Errorf("scan report income category: %w", err)
+		}
+		if statistics.Summary.Income > 0 {
+			value.Percentage = float64(value.Amount) * 100 / float64(statistics.Summary.Income)
+		}
+		statistics.IncomeByCategory = append(statistics.IncomeByCategory, value)
+	}
+	if err := incomeRows.Err(); err != nil {
+		return Statistics{}, fmt.Errorf("iterate report income categories: %w", err)
+	}
+	incomeRows.Close()
+
+	// 3. Top expense merchants
 	merchantRows, err := r.db.Query(ctx, `
 		SELECT BTRIM(merchant), SUM(amount), COUNT(*)
 		FROM transactions
@@ -147,6 +180,30 @@ func (r *Repository) LoadAggregatedStatistics(ctx context.Context, start, endExc
 		return Statistics{}, fmt.Errorf("iterate report merchants: %w", err)
 	}
 	merchantRows.Close()
+
+	// 4. Top income sources
+	incomeSourceRows, err := r.db.Query(ctx, `
+		SELECT BTRIM(merchant), SUM(amount), COUNT(*)
+		FROM transactions
+		WHERE occurred_at >= $1 AND occurred_at < $2 AND source <> 'reconcile' AND type = 'income' AND NULLIF(BTRIM(merchant), '') IS NOT NULL
+		GROUP BY 1 ORDER BY 2 DESC, 3 DESC, 1 ASC LIMIT 5
+	`, start, endExclusive)
+	if err != nil {
+		return Statistics{}, fmt.Errorf("aggregate report income sources: %w", err)
+	}
+	defer incomeSourceRows.Close()
+	for incomeSourceRows.Next() {
+		var value MerchantTotal
+		if err := incomeSourceRows.Scan(&value.Merchant, &value.Amount, &value.TransactionCount); err != nil {
+			return Statistics{}, fmt.Errorf("scan report income source: %w", err)
+		}
+		statistics.TopIncomeSources = append(statistics.TopIncomeSources, value)
+	}
+	if err := incomeSourceRows.Err(); err != nil {
+		return Statistics{}, fmt.Errorf("iterate report income sources: %w", err)
+	}
+	incomeSourceRows.Close()
+
 	return statistics, nil
 }
 

@@ -38,7 +38,8 @@ func (s *V2Service) Statistics(ctx context.Context, input StatisticsRequest) (St
 	}
 	response := StatisticsResponse{
 		Range: resolved.dateRange, ComparisonMode: resolved.comparisonMode, Summary: current.Summary,
-		ExpenseByCategory: current.ExpenseByCategory, TopMerchants: current.TopMerchants,
+		ExpenseByCategory: current.ExpenseByCategory, IncomeByCategory: current.IncomeByCategory,
+		TopMerchants: current.TopMerchants, TopIncomeSources: current.TopIncomeSources,
 	}
 	if resolved.comparison != nil {
 		previous, err := s.repository.LoadAggregatedStatistics(ctx, resolved.previousStart, resolved.previousEnd)
