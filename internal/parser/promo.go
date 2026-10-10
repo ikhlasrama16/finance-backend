@@ -94,6 +94,11 @@ var nonTransactionIndicators = []string{
 }
 
 var transactionIndicators = []string{
+	"rincian pembayaran",
+	"kamu membayar",
+	"rincian transaksi",
+	"jumlah transfer",
+	"uang keluar",
 	"pembayaran qris",
 	"pembayaran berhasil",
 	"pembayaran sukses",

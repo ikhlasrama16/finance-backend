@@ -22,9 +22,11 @@ var (
 func cleanReceiptParty(val string) string {
 	val = strings.TrimSpace(val)
 	val = strings.Trim(val, " \t\r\n.,;:->")
-	if idx := strings.Index(strings.ToLower(val), "seabank"); idx > 0 {
-		val = strings.TrimSpace(val[:idx])
-		val = strings.Trim(val, " \t\r\n.,;:->")
+	for _, suffix := range []string{"seabank", "shopeepay", "bank jago", "kantong utama"} {
+		if idx := strings.Index(strings.ToLower(val), suffix); idx > 0 {
+			val = strings.TrimSpace(val[:idx])
+			val = strings.Trim(val, " \t\r\n.,;:->")
+		}
 	}
 	return val
 }

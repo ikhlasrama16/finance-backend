@@ -45,7 +45,7 @@ func (s *Service) process(ctx context.Context, raw Notification) (IngestionResul
 		if err := s.repository.MarkIgnored(ctx, raw.ID, parserName); err != nil {
 			return IngestionResult{}, err
 		}
-		return IngestionResult{RawNotificationID: raw.ID, Status: "ignored"}, nil
+		return IngestionResult{RawNotificationID: raw.ID, Status: "ignored", Reason: "notification ignored (supporting/promo/non-transaction)"}, nil
 	}
 	if parsed.ParseStatus == "FAILED" || parsed.ParseStatus == "UNRESOLVED" {
 		return s.failed(ctx, raw, "required transaction information missing", parserName)
@@ -74,14 +74,27 @@ func (s *Service) process(ctx context.Context, raw Notification) (IngestionResul
 	if err := tx.Commit(ctx); err != nil {
 		return IngestionResult{}, fmt.Errorf("commit notification transaction: %w", err)
 	}
-	return IngestionResult{RawNotificationID: raw.ID, Status: "parsed", TransactionID: &created.ID}, nil
+	accountName := parsed.SourceAccountName
+	if accountName == "" {
+		accountName = parsed.DestinationAccountName
+	}
+	return IngestionResult{
+		RawNotificationID: raw.ID,
+		Status:            "parsed",
+		TransactionID:     &created.ID,
+		Amount:            parsed.Amount,
+		Type:              parsed.Type,
+		Merchant:          parsed.Merchant,
+		Account:           accountName,
+		Description:       parsed.Description,
+	}, nil
 }
 
 func (s *Service) failed(ctx context.Context, raw Notification, reason, parserName string) (IngestionResult, error) {
 	if err := s.repository.MarkFailed(ctx, raw.ID, reason, parserName); err != nil {
 		return IngestionResult{}, err
 	}
-	return IngestionResult{RawNotificationID: raw.ID, Status: "failed"}, nil
+	return IngestionResult{RawNotificationID: raw.ID, Status: "failed", Reason: reason}, nil
 }
 
 func (s *Service) parse(ctx context.Context, input parser.Input) (*parser.Result, string, error) {

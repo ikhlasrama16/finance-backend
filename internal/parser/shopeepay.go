@@ -1,19 +1,74 @@
 package parser
 
-import "regexp"
+import (
+	"regexp"
+	"strings"
+)
 
 type shopeePayParser struct{}
 
 var shopeeAmountRE = regexp.MustCompile(`(?i)pengisian saldo sebesar\s*rp\s*([\d.,]+)`)
 var shopeeBiFastTransferInRE = regexp.MustCompile(`(?i)(.+?)\s+mengirimkan\s+dana\s+sebesar\s+(?:rp\s*)?([\d.,]+)\s+ke\s+shopeepay`)
 var shopeePaymentSuccessRE = regexp.MustCompile(`(?i)pembayaran\s+sebesar\s+(?:rp\s*)?([\d.,]+)\s+dengan\s+shopeepay\s+telah\s+berhasil`)
+var (
+	shopeeKamuMembayarRE = regexp.MustCompile(`(?i)(?:kamu\s+membayar|total\s+pembayaran|jumlah\s+pembayaran)\s*(?:rp\s*)?([\d.,]+)`)
+	shopeeTopAmountRE    = regexp.MustCompile(`(?i)(?:^|[\r\n\s])\-?\s*rp\s*([\d.,]+)\s*(?:[\r\n\s]|berhasil)`)
+	shopeeBayarKeRE      = regexp.MustCompile(`(?i)\bbayar\s+ke\b\s*[:\-]?\s*(.+?)(?:\s*>\s*|\s*\r?\n|\s+waktu\b|\s+kamu\s+membayar|$)`)
+)
 
 func (shopeePayParser) CanParse(input Input) bool {
-	return accountFromSource(input.SourceApp) == "ShopeePay"
+	source := accountFromSource(input.SourceApp)
+	if source == "ShopeePay" {
+		return true
+	}
+	if isOwnedAccount(source) {
+		return false
+	}
+	text := strings.ToLower(combinedText(input))
+	return strings.Contains(text, "shopeepay") || (strings.Contains(text, "rincian pembayaran") && (strings.Contains(text, "shopee") || strings.Contains(text, "bayar ke")))
 }
+
 func (shopeePayParser) Parse(input Input) (*Result, error) {
 	text := combinedText(input)
 	normalized := normalizedInput(input)
+
+	// ShopeePay screen receipt (Rincian Pembayaran / Bayar Ke)
+	if containsAny(normalized, "rincian pembayaran", "kamu membayar", "bayar ke") {
+		amount := amountFromRegex(text, shopeeKamuMembayarRE)
+		if amount == 0 {
+			amount = amountFromRegex(text, shopeeTopAmountRE)
+		}
+		if amount == 0 {
+			amount, _ = extractBestAmount(text)
+		}
+		if amount > 0 {
+			rawMerchant := capture(shopeeBayarKeRE, text)
+			cleanMerchant := cleanReceiptParty(rawMerchant)
+			isQRIS := strings.HasPrefix(strings.ToUpper(cleanMerchant), "QRIS") || strings.Contains(strings.ToLower(normalized), "qris")
+			cleanMerchant = strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(cleanMerchant, "QRIS"), "qris"))
+			cleanMerchant = cleanReceiptParty(cleanMerchant)
+
+			if !isValidMerchantName(cleanMerchant) {
+				cleanMerchant = ""
+			}
+
+			desc := "Pembayaran ShopeePay"
+			if isQRIS {
+				desc = "Pembayaran QRIS ShopeePay"
+			}
+
+			return &Result{
+				Type:              "expense",
+				Amount:            amount,
+				SourceAccountName: "ShopeePay",
+				Merchant:          cleanMerchant,
+				CategoryName:      "Belum Dikategorikan",
+				Description:       desc,
+				ParseStatus:       "AUTO",
+				Confidence:        0.95,
+			}, nil
+		}
+	}
 
 	// SPayLater bill payment confirmation (supporting notification)
 	if containsAny(normalized, "spaylater") && containsAny(normalized, "pembayaran tagihan spaylater kamu telah diterima", "spaylater bill payment has been received") {

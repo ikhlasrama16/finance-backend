@@ -211,6 +211,19 @@ func TestMustParseRegressionCases(t *testing.T) {
 			source:   "Bank Jago",
 			merchant: "John Doe",
 		},
+		{
+			name: "ShopeePay QRIS Screen Receipt",
+			input: Input{
+				SourceApp: "Transaksi",
+				Title:     "Rincian Pembayaran",
+				Text:      "-Rp32.700\nBerhasil\nTotal Penghematan Rp50\nAplikasi ShopeePay 10.10 Saldo Kaget 100JT Makan KFC Rp51.000 Rp10.000\nLihat Bukti Transaksi yang Asli\nRincian Pesanan\nBayar Ke QRIS IDM TCDJ IPDA TUT H\nWaktu Selesai 27 Sep 2026 19:38\nKamu Membayar Rp32.700\nLihat Lainnya\nRincian Promo\nCashback Rp50\nDari transaksi ini\nSplit Bill",
+			},
+			typ:         "expense",
+			amount:      32700,
+			source:      "ShopeePay",
+			merchant:    "IDM TCDJ IPDA TUT H",
+			description: "Pembayaran QRIS ShopeePay",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
