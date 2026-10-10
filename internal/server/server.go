@@ -10,6 +10,7 @@ import (
 	"finance-monitor/backend/internal/category"
 	"finance-monitor/backend/internal/middleware"
 	"finance-monitor/backend/internal/notification"
+	"finance-monitor/backend/internal/parser"
 	"finance-monitor/backend/internal/report"
 	"finance-monitor/backend/internal/rule"
 	"finance-monitor/backend/internal/transaction"
@@ -64,6 +65,7 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 		classifierModel = options.OpenRouterModel
 	}
 	classifier := category.NewOpenRouterClassifier(options.OpenRouterAPIKey, classifierModel)
+	aiParser := parser.NewOpenRouterParser(options.OpenRouterAPIKey, classifierModel)
 
 	notificationService := notification.NewProcessingService(
 		db,
@@ -72,7 +74,7 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 		categoryRepository,
 		transactionRepository,
 		ruleRepository,
-	).WithClassifier(classifier)
+	).WithClassifier(classifier).WithAIParser(aiParser)
 
 	notificationHandler := notification.NewHandler(
 		notificationService,

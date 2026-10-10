@@ -1,12 +1,16 @@
 package parser
 
-import "regexp"
+import (
+	"regexp"
+	"strings"
+)
 
 type genericParser struct{}
 
 var genericMerchantRE = regexp.MustCompile(`(?i)\b(?:kepada|ke)\b\s+(.+?)(?:\s+pada|\s+sebesar|\.|$)`)
 var genericFromRE = regexp.MustCompile(`(?i)\bdari\b\s+(.+?)(?:\s+pada|\s+sebesar|\.|$)`)
 var genericAtRE = regexp.MustCompile(`(?i)\bdi\b\s+(.+?)(?:\s+sebesar|\.|$)`)
+var screenReceiptRE = regexp.MustCompile(`(?i)(?:rincian\s+transaksi|bukti\s+transaksi)\s*[\r\n]+([^\r\n]+)`)
 
 func (genericParser) CanParse(input Input) bool { return true }
 func (genericParser) Parse(input Input) (*Result, error) {
@@ -24,11 +28,22 @@ func (genericParser) Parse(input Input) (*Result, error) {
 	if merchant == "" {
 		merchant = capture(genericAtRE, text)
 	}
+	if merchant == "" {
+		if m := screenReceiptRE.FindStringSubmatch(text); len(m) > 1 {
+			candidate := strings.TrimSpace(m[1])
+			if !strings.EqualFold(candidate, "berhasil") && !strings.EqualFold(candidate, "sukses") && !strings.Contains(candidate, "Rp") {
+				merchant = candidate
+			}
+		}
+	}
 	if owned := detectOwnedAccount(merchant); owned != "" {
 		destination = owned
 	}
-	if containsAny(normalized, "dana masuk", "transfer masuk", "menerima dana", "uang masuk", "saldo bertambah", "isi saldo berhasil", "top up berhasil") {
+	if containsAny(normalized, "dana masuk", "transfer masuk", "menerima dana", "uang masuk", "saldo bertambah", "isi saldo berhasil", "top up berhasil") || strings.Contains(text, "+Rp") || strings.Contains(text, "+ Rp") {
 		from := capture(genericFromRE, text)
+		if from == "" && merchant != "" {
+			from = merchant
+		}
 		if owned := detectOwnedAccount(from); owned != "" && isOwnedAccount(source) && owned != source {
 			return &Result{Type: "transfer", Amount: amount, SourceAccountName: owned, DestinationAccountName: source, ParseStatus: "AUTO", Confidence: 0.85}, nil
 		}
@@ -40,7 +55,7 @@ func (genericParser) Parse(input Input) (*Result, error) {
 		}
 		return &Result{Type: "expense", Amount: amount, SourceAccountName: sourceIfOwned(source), Merchant: merchant, CategoryName: "Belum Dikategorikan", ParseStatus: "NEEDS_REVIEW", Confidence: 0.82}, nil
 	}
-	if containsAny(normalized, "pembayaran berhasil", "pembayaran sukses", "transaksi berhasil", "qris", "pembelian", "bayar", "payment successful", "debit") {
+	if containsAny(normalized, "uang keluar", "pembayaran berhasil", "pembayaran sukses", "transaksi berhasil", "qris", "pembelian", "bayar", "payment successful", "debit") || strings.Contains(text, "-Rp") || strings.Contains(text, "- Rp") {
 		return &Result{Type: "expense", Amount: amount, SourceAccountName: sourceIfOwned(source), Merchant: merchant, CategoryName: "Belum Dikategorikan", ParseStatus: "AUTO", Confidence: 0.78}, nil
 	}
 	if containsAny(normalized, "gaji", "salary", "payroll", "bonus", "pendapatan", "cashback diterima") {

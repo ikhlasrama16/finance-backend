@@ -413,3 +413,46 @@ func TestProcessNotificationWithPromoWordingSucceeds(t *testing.T) {
 }
 
 func mustTime(value string) (result time.Time) { result, _ = time.Parse(time.RFC3339, value); return }
+
+type fakeAIParser struct {
+	result *parser.Result
+	err    error
+	called bool
+}
+
+func (f *fakeAIParser) Parse(_ context.Context, _ parser.Input) (*parser.Result, error) {
+	f.called = true
+	return f.result, f.err
+}
+
+func TestService_AIParserFallback(t *testing.T) {
+	aiParsed := &parser.Result{
+		Type:              "expense",
+		Amount:            9300000,
+		Merchant:          "MUHAMAD FATONY ANWAR",
+		SourceAccountName: "Bank Jago",
+		ParseStatus:       "AUTO",
+		Confidence:        0.95,
+	}
+	fakeAI := &fakeAIParser{result: aiParsed}
+	service := &Service{aiParser: fakeAI}
+
+	// An input that has no merchant in regex
+	parsed, name, err := service.parse(context.Background(), parser.Input{
+		SourceApp: "iOS Auto Log",
+		Title:     "Transaksi Berhasil",
+		Text:      "Pembayaran berhasil sejumlah Rp50.000",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !fakeAI.called {
+		t.Fatalf("expected AI parser to be called as fallback")
+	}
+	if name != "ai_parser" {
+		t.Fatalf("expected parser name ai_parser, got %s", name)
+	}
+	if parsed.Merchant != "MUHAMAD FATONY ANWAR" {
+		t.Fatalf("expected MUHAMAD FATONY ANWAR, got %s", parsed.Merchant)
+	}
+}
