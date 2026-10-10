@@ -1,5 +1,15 @@
 package parser
 
+var failedTransactionIndicators = []string{
+	"gagal karena saldo tidak cukup",
+	"saldo tidak cukup",
+	"pembayaran gagal",
+	"transaksi gagal",
+	"telah dibatalkan",
+	"pembayaran dibatalkan",
+	"transaksi dibatalkan",
+}
+
 var promoIndicators = []string{
 	"promo",
 	"diskon",
@@ -30,6 +40,30 @@ var promoIndicators = []string{
 	"buruan",
 	"lindungi diri",
 	"saldo kaget",
+	"pasti dapat",
+	"ambil cashback",
+	"spaylater bill",
+	"cek tagihan spaylater",
+	"spaylater day",
+	"s.d.",
+	"s.d",
+	"s/d",
+	"hingga",
+	"bisa dapat",
+	"bisa dapetin",
+	"bisa menangin",
+	"bisa raih",
+	"transaksi sekarang",
+	"belanja sekarang",
+	"pinjaman tunai",
+	"tersedia pinjaman",
+	"cek limitmu",
+	"ajuin pinjaman",
+	"dijamin dapat",
+	"dapat saldo",
+	"bayar apapun",
+	"ada saldo s.d",
+	"ada saldo",
 }
 
 var nonTransactionIndicators = []string{
@@ -40,6 +74,10 @@ var nonTransactionIndicators = []string{
 	"driver menuju lokasi",
 	"pesanan sedang diantar",
 	"pesanan dalam perjalanan",
+	"pesanan telah dikirim",
+	"pesananmu akan diantar",
+	"pesanan diserahkan ke jasa kirim",
+	"shipped out",
 	"touch id berhasil diaktifkan",
 	"fingerprint berhasil",
 	"passcode diubah",
@@ -49,6 +87,10 @@ var nonTransactionIndicators = []string{
 	"fitur baru",
 	"cobain fitur",
 	"kini hadir",
+	"kamu telah membuat kantong",
+	"kartu overseas",
+	"menagih usd",
+	"kunci kantong tabungan terkunci",
 }
 
 var transactionIndicators = []string{
@@ -79,6 +121,9 @@ var transactionIndicators = []string{
 
 func isPromotion(input Input) bool {
 	text := normalizedInput(input)
+	if containsAny(text, failedTransactionIndicators...) {
+		return true
+	}
 	if containsAny(text, nonTransactionIndicators...) {
 		return true
 	}

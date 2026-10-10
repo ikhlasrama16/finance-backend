@@ -83,7 +83,8 @@ func (c *OpenRouterClient) Generate(ctx context.Context, prompt string) (string,
 	}
 	defer response.Body.Close()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return "", fmt.Errorf("%w: OpenRouter returned HTTP %d", ErrAIUnavailable, response.StatusCode)
+		respBody, _ := io.ReadAll(io.LimitReader(response.Body, 1024))
+		return "", fmt.Errorf("%w: OpenRouter returned HTTP %d: %s", ErrAIUnavailable, response.StatusCode, string(respBody))
 	}
 	var payload struct {
 		Choices []struct {

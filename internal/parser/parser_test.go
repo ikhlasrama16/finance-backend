@@ -44,6 +44,9 @@ func TestPromotionPrecedence(t *testing.T) {
 		{"Touch ID", Input{SourceApp: "SeaBank", Title: "Touch ID Berhasil Diaktifkan"}, true},
 		{"Shopee Chat", Input{SourceApp: "Shopee", Text: "Kamu mendapat chat baru"}, true},
 		{"Shopee Driver", Input{SourceApp: "Shopee", Text: "Pengemudi hampir tiba!"}, true},
+		{"ShopeePay Ada Saldo s.d. Promo", Input{SourceApp: "ShopeePay", Title: "Ada saldo s.d. Rp100.000 untuk ikhlasramadhan😉", Text: "Bayar apapun pakai QRIS bisa dapat saldo s.d 100RB loh! Transaksi sekarang 👉"}, true},
+		{"ShopeePay Pinjaman Tunai", Input{SourceApp: "ShopeePay", Title: "Pinjaman Tunai Siap Cair🥰", Text: "ikhlasramadhan, kamu bisa ajuin pinjaman tunai dengan bunga mulai 0.06% dan limit s.d. 100 juta! Cek limitmu👉"}, true},
+		{"ShopeePay AMBIL Cashback", Input{SourceApp: "ShopeePay", Title: "AMBIL: Cashback s.d. Rp100.000💰", Text: "Bayar QRIS dijamin dapat s.d 100RB! Belanja sekarang👉"}, true},
 		{"cashback transaction", Input{Title: "Pembayaran berhasil dapat cashback", Text: "Pembayaran sebesar Rp50.000 berhasil dapat cashback"}, false},
 		{"QRIS with promo", Input{SourceApp: "SeaBank", Title: "Pembayaran QRIS Berhasil", Text: "Pembayaran QRIS untuk WARUNG MAKMUR sebesar Rp25.000 telah berhasil. Dapatkan diskon khusus untukmu!"}, false},
 	}
@@ -76,6 +79,34 @@ func TestSeaBankRealtimeTransferClassifiesExternalAndOwnedRecipients(t *testing.
 				t.Fatalf("missing default category: %#v", got)
 			}
 		})
+	}
+}
+
+func TestSeaBankIncomingFundsUsesAmountBeforeReferenceNumber(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "SeaBank",
+		Title:     "Transfer Masuk",
+		Text:      "Kamu menerima transfer saldo senilai Rp393.500 ke rekening 8380. Ref. number 20260902BBBAIDJA010O9965884434.",
+	})
+	if err != nil || got == nil {
+		t.Fatalf("got %#v, err %v", got, err)
+	}
+	if got.Type != "income" || got.Amount != 393500 || got.DestinationAccountName != "SeaBank" {
+		t.Fatalf("unexpected result %#v", got)
+	}
+}
+
+func TestLivinIncomingFundsWithAmountBetweenDanaAndMasuk(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "Livin' by Mandiri",
+		Title:     "Ini Dia Transaksi Terbaru Anda",
+		Text:      "Dana Rp 20.000,00 masuk ke rek. ****2071. Login ke Livin' by Mandiri untuk cek Mutasi Transaksi.",
+	})
+	if err != nil || got == nil {
+		t.Fatalf("got %#v, err %v", got, err)
+	}
+	if got.Type != "income" || got.Amount != 20000 || got.DestinationAccountName != "Mandiri" || got.CategoryName != "Pemasukan" {
+		t.Fatalf("unexpected result %#v", got)
 	}
 }
 
@@ -177,6 +208,17 @@ func TestShopeePaySupportingTopUpIgnored(t *testing.T) {
 	}
 }
 
+func TestShopeePayQRISCashbackPromotionIsIgnored(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "ShopeePay",
+		Title:     "Saldo s.d. Rp100.000: KLAIM👉",
+		Text:      "Transaksi QRIS pasti dapat s.d. 100RB! Ambil cashback saldonya 🏃💨",
+	})
+	if err != nil || got == nil || !got.Ignore || got.ParseStatus != "IGNORED_PROMO" {
+		t.Fatalf("unexpected result %#v, err %v", got, err)
+	}
+}
+
 func TestShopeeMarketplaceTopUpCompletionIgnored(t *testing.T) {
 	got, err := Parse(Input{SourceApp: "Shopee", Title: "Top-up Completed", Text: "Your Top up request of Rp10.000 is successful and your current balance is Rp10.050."})
 	if err != nil || got == nil || !got.Ignore || got.ParseStatus != "IGNORED_SUPPORTING_NOTIFICATION" {
@@ -211,3 +253,167 @@ func TestGenericConservativeParsing(t *testing.T) {
 		}
 	}
 }
+
+func TestShopeePayBiFastTransferIn(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "ShopeePay",
+		Title:     "Saldo ShopeePay diterima!",
+		Text:      "HIELMI SULAEMAN mengirimkan dana sebesar Rp20.000 ke ShopeePay-mu melalui BI-Fast.",
+	})
+	if err != nil || got == nil {
+		t.Fatalf("unexpected result %#v, err %v", got, err)
+	}
+	if got.Type != "income" || got.Amount != 20000 || got.DestinationAccountName != "ShopeePay" || got.Merchant != "HIELMI SULAEMAN" {
+		t.Fatalf("unexpected values: %#v", got)
+	}
+}
+
+func TestShopeeRefund(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "Shopee",
+		Title:     "Permintaan Pengembalian Barang Disetujui",
+		Text:      "Pengajuan Pengembalian Dana 2609100NMXFHD81 disetujui. Pengembalian Dana sebesar Rp 151.200 akan dikembalikan ke ShopeePay Balance-mu dalam 1 hari kerja.",
+	})
+	if err != nil || got == nil {
+		t.Fatalf("unexpected result %#v, err %v", got, err)
+	}
+	if got.Type != "income" || got.Amount != 151200 || got.DestinationAccountName != "ShopeePay" {
+		t.Fatalf("unexpected values: %#v", got)
+	}
+}
+
+func TestFailedTransactionIgnored(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "ShopeePay",
+		Title:     "Pembayaran ke Spotify Premium ID gagal",
+		Text:      "Pembayaran sebesar Rp59.900 gagal karena saldo tidak cukup. Isi saldo atau tambahkan SPayLater agar pembayaran berhasil.",
+	})
+	if err != nil || got == nil || !got.Ignore {
+		t.Fatalf("expected failed transaction to be ignored, got %#v, err %v", got, err)
+	}
+}
+
+func TestSPayLaterConfirmationIgnored(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "Shopee",
+		Title:     "SPayLater",
+		Text:      "Congrats! Your SPayLater bill payment has been received and your limit will be restored soon.",
+	})
+	if err != nil || got == nil || !got.Ignore {
+		t.Fatalf("expected SPayLater confirmation to be ignored, got %#v, err %v", got, err)
+	}
+}
+
+func TestSeaBankRealtimeTransferWithoutRecipient(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "SeaBank",
+		Title:     "Realtime Transfer",
+		Text:      "Kamu baru melakukan transfer real-time senilai Rp70.000 pada 21 Aug 2026 11:24. Jika kamu tidak melakukan ini, segera hubungi 1500130.",
+	})
+	if err != nil || got == nil {
+		t.Fatalf("unexpected result %#v, err %v", got, err)
+	}
+	if got.Type != "expense" || got.Amount != 70000 || got.SourceAccountName != "SeaBank" || got.CategoryName != "Belum Dikategorikan" {
+		t.Fatalf("unexpected values: %#v", got)
+	}
+}
+
+func TestJagoTransferOutToExternal(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "Jago",
+		Title:     "Jago",
+		Text:      "Kamu telah melakukan transfer Rp178.500 ke DHEVIA LEUYS THIAQUFYAN. Butuh bantuan? Silakan Tanya Jago di 1500 746.",
+	})
+	if err != nil || got == nil {
+		t.Fatalf("unexpected result %#v, err %v", got, err)
+	}
+	if got.Type != "expense" || got.Amount != 178500 || got.SourceAccountName != "Bank Jago" || got.Merchant != "DHEVIA LEUYS THIAQUFYAN" || got.CategoryName != "Belum Dikategorikan" {
+		t.Fatalf("unexpected values: %#v", got)
+	}
+}
+
+func TestJagoTransferOutToOwnedAccount(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "Jago",
+		Title:     "Jago",
+		Text:      "Kamu telah melakukan transfer Rp50.000 ke SeaBank. Butuh bantuan? Silakan Tanya Jago di 1500 746.",
+	})
+	if err != nil || got == nil {
+		t.Fatalf("unexpected result %#v, err %v", got, err)
+	}
+	if got.Type != "transfer" || got.Amount != 50000 || got.SourceAccountName != "Bank Jago" || got.DestinationAccountName != "SeaBank" {
+		t.Fatalf("unexpected values: %#v", got)
+	}
+}
+
+func TestJagoIncomingFundsFromExternal(t *testing.T) {
+	tests := []struct {
+		name, text, sender string
+		amount             int64
+	}{
+		{
+			name:   "menerima transfer",
+			text:   "Kamu menerima transfer Rp100.000 dari BUDI SANTOSO. Butuh bantuan? Silakan Tanya Jago di 1500 746.",
+			sender: "BUDI SANTOSO",
+			amount: 100000,
+		},
+		{
+			name:   "menerima uang",
+			text:   "Kamu menerima uang Rp250.000 dari SITI AMINAH. Butuh bantuan? Silakan Tanya Jago di 1500 746.",
+			sender: "SITI AMINAH",
+			amount: 250000,
+		},
+		{
+			name:   "uang masuk ke kantong utama",
+			text:   "Uang masuk sebesar Rp75.000 dari AHMAD ke Kantong Utama kamu.",
+			sender: "AHMAD",
+			amount: 75000,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Parse(Input{
+				SourceApp: "Jago",
+				Title:     "Jago",
+				Text:      tt.text,
+			})
+			if err != nil || got == nil {
+				t.Fatalf("unexpected result %#v, err %v", got, err)
+			}
+			if got.Type != "income" || got.Amount != tt.amount || got.DestinationAccountName != "Bank Jago" || got.Merchant != tt.sender || got.CategoryName != "Pemasukan" {
+				t.Fatalf("unexpected values: %#v", got)
+			}
+		})
+	}
+}
+
+func TestJagoIncomingFundsFromOwnedAccount(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "Jago",
+		Title:     "Jago",
+		Text:      "Kamu menerima transfer Rp50.000 dari SeaBank. Butuh bantuan? Silakan Tanya Jago di 1500 746.",
+	})
+	if err != nil || got == nil {
+		t.Fatalf("unexpected result %#v, err %v", got, err)
+	}
+	if got.Type != "transfer" || got.Amount != 50000 || got.SourceAccountName != "SeaBank" || got.DestinationAccountName != "Bank Jago" {
+		t.Fatalf("unexpected values: %#v", got)
+	}
+}
+
+func TestGenericMelakukanTransfer(t *testing.T) {
+	got, err := Parse(Input{
+		SourceApp: "UnknownApp",
+		Title:     "Info",
+		Text:      "Kamu telah melakukan transfer Rp80.000 ke BUKALAPAK pada 26/09/2026.",
+	})
+	if err != nil || got == nil {
+		t.Fatalf("unexpected result %#v, err %v", got, err)
+	}
+	if got.Type != "expense" || got.Amount != 80000 || got.Merchant != "BUKALAPAK" {
+		t.Fatalf("unexpected values: %#v", got)
+	}
+}
+
+
+

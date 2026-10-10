@@ -67,12 +67,18 @@ type Comparison struct {
 	PreviousPeriodExpense   int64   `json:"previous_period_expense"`
 	ExpenseChangeAmount     int64   `json:"expense_change_amount"`
 	ExpenseChangePercentage float64 `json:"expense_change_percentage"`
+	PreviousPeriodIncome    int64   `json:"previous_period_income,omitempty"`
+	IncomeChangeAmount      int64   `json:"income_change_amount,omitempty"`
+	IncomeChangePercentage  float64 `json:"income_change_percentage,omitempty"`
+	NetCashflowChangeAmount int64   `json:"net_cashflow_change_amount,omitempty"`
 }
 
 type Statistics struct {
 	Summary           Summary
 	ExpenseByCategory []CategoryTotal
+	IncomeByCategory  []CategoryTotal
 	TopMerchants      []MerchantTotal
+	TopIncomeSources  []MerchantTotal
 }
 
 type AIResult struct {
@@ -88,7 +94,9 @@ type Response struct {
 	EndDate           string          `json:"end_date"`
 	Summary           Summary         `json:"summary"`
 	ExpenseByCategory []CategoryTotal `json:"expense_by_category"`
+	IncomeByCategory  []CategoryTotal `json:"income_by_category,omitempty"`
 	TopMerchants      []MerchantTotal `json:"top_merchants"`
+	TopIncomeSources  []MerchantTotal `json:"top_income_sources,omitempty"`
 	Comparison        Comparison      `json:"comparison"`
 	AI                AIResult        `json:"ai"`
 }

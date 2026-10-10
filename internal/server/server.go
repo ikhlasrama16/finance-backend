@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"finance-monitor/backend/internal/account"
+	"finance-monitor/backend/internal/auth"
 	"finance-monitor/backend/internal/category"
 	"finance-monitor/backend/internal/middleware"
 	"finance-monitor/backend/internal/notification"
-	"finance-monitor/backend/internal/parser"
 	"finance-monitor/backend/internal/report"
 	"finance-monitor/backend/internal/rule"
 	"finance-monitor/backend/internal/transaction"
@@ -19,8 +19,9 @@ import (
 )
 
 type Server struct {
-	httpServer *http.Server
-	db         *pgxpool.Pool
+	httpServer   *http.Server
+	db           *pgxpool.Pool
+	reportWorker *report.Worker
 }
 
 type Options struct {
@@ -30,6 +31,8 @@ type Options struct {
 	OpenRouterAPIKey          string
 	OpenRouterModel           string
 	OpenRouterClassifierModel string
+	AuthBootstrapEmail        string
+	AuthBootstrapPassword     string
 }
 
 func New(
@@ -65,7 +68,7 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 		classifierModel = options.OpenRouterModel
 	}
 	classifier := category.NewOpenRouterClassifier(options.OpenRouterAPIKey, classifierModel)
-	aiParser := parser.NewOpenRouterParser(options.OpenRouterAPIKey, classifierModel)
+	aiFallbackParser := notification.NewOpenRouterAIFallbackParser(options.OpenRouterAPIKey, classifierModel)
 
 	notificationService := notification.NewProcessingService(
 		db,
@@ -74,15 +77,20 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 		categoryRepository,
 		transactionRepository,
 		ruleRepository,
-	).WithClassifier(classifier).WithAIParser(aiParser)
+	).WithClassifier(classifier).WithAIFallbackParser(aiFallbackParser)
 
 	notificationHandler := notification.NewHandler(
 		notificationService,
 	)
 	reportRepository := report.NewRepository(db)
+	authRepository := auth.NewRepository(db)
+	authService := auth.NewService(authRepository)
+	authHandler := auth.NewHandler(authService, options.AppEnv == "production")
 	reportClient := report.NewOpenRouterClient(options.OpenRouterAPIKey, options.OpenRouterModel)
 	reportService := report.NewService(reportRepository, reportClient)
 	reportHandler := report.NewHandler(reportService)
+	reportV2Service := report.NewV2Service(reportRepository, reportClient)
+	reportV2Handler := report.NewV2Handler(reportV2Service)
 
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -95,6 +103,9 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 	})
 
 	mux.HandleFunc("GET /api/v1/ready", readinessHandler(db.Ping))
+	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
+	mux.HandleFunc("POST /api/v1/auth/logout", authHandler.Logout)
+	mux.HandleFunc("GET /api/v1/auth/me", authHandler.Me)
 
 	mux.HandleFunc(
 		"GET /api/v1/accounts",
@@ -134,13 +145,17 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 		categoryHandler.Create,
 	)
 	mux.HandleFunc("POST /api/v1/reports/ai", reportHandler.Create)
+	mux.HandleFunc("GET /api/v2/reports/statistics", reportV2Handler.Statistics)
+	mux.HandleFunc("POST /api/v2/reports/ai", reportV2Handler.CreateAIJob)
+	mux.HandleFunc("GET /api/v2/reports/ai/{id}", reportV2Handler.GetAIJob)
 	mux.HandleFunc("GET /api/v1/notifications", notificationHandler.List)
 	var notificationRoute http.Handler = http.HandlerFunc(notificationHandler.Create)
 	notificationRoute = middleware.BearerAuth(options.IngestAPIKey)(notificationRoute)
 	mux.Handle("POST /api/v1/notifications", notificationRoute)
 
 	development := options.AppEnv != "production"
-	handler := middleware.CORS(options.CORSAllowedOrigins, development)(mux)
+	var handler http.Handler = auth.RequireSession(authService)(mux)
+	handler = middleware.CORS(options.CORSAllowedOrigins, development)(handler)
 
 	return &Server{
 		httpServer: &http.Server{
@@ -151,7 +166,7 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 			WriteTimeout:      60 * time.Second,
 			IdleTimeout:       60 * time.Second,
 		},
-		db: db,
+		db: db, reportWorker: report.NewWorker(reportRepository, reportClient),
 	}
 }
 
@@ -175,6 +190,11 @@ func (s *Server) Run() error {
 }
 
 func (s *Server) RunContext(ctx context.Context) error {
+	workerCtx, cancelWorker := context.WithCancel(ctx)
+	defer cancelWorker()
+	if s.reportWorker != nil {
+		go s.reportWorker.Run(workerCtx)
+	}
 	errors := make(chan error, 1)
 	go func() { errors <- s.httpServer.ListenAndServe() }()
 	select {

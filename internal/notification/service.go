@@ -10,7 +10,6 @@ import (
 
 	"finance-monitor/backend/internal/account"
 	"finance-monitor/backend/internal/category"
-	"finance-monitor/backend/internal/parser"
 	"finance-monitor/backend/internal/rule"
 	"finance-monitor/backend/internal/transaction"
 
@@ -34,7 +33,7 @@ type Service struct {
 	transactionRepository parsedTransactionRepository
 	ruleRepository        ruleRepository
 	classifier            category.Classifier
-	aiParser              parser.AIParser
+	aiParser              AIFallbackParser
 }
 
 type accountResolver interface {
@@ -73,7 +72,7 @@ func (s *Service) WithClassifier(classifier category.Classifier) *Service {
 	return s
 }
 
-func (s *Service) WithAIParser(aiParser parser.AIParser) *Service {
+func (s *Service) WithAIFallbackParser(aiParser AIFallbackParser) *Service {
 	s.aiParser = aiParser
 	return s
 }

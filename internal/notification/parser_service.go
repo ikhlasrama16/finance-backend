@@ -21,6 +21,23 @@ func (s *Service) process(ctx context.Context, raw Notification) (IngestionResul
 	if err != nil {
 		return s.failed(ctx, raw, "parser error", parserName)
 	}
+	if (parsed == nil || (!parsed.Ignore && strings.TrimSpace(parsed.Merchant) == "" && strings.TrimSpace(parsed.Description) == "")) && s.aiParser != nil {
+		if aiResult, aiErr := s.aiParser.ParseNotification(ctx, input); aiErr == nil && aiResult != nil && !aiResult.Ignore && aiResult.Amount > 0 {
+			if parsed != nil {
+				if aiResult.SourceAccountName == "" {
+					aiResult.SourceAccountName = parsed.SourceAccountName
+				}
+				if aiResult.DestinationAccountName == "" {
+					aiResult.DestinationAccountName = parsed.DestinationAccountName
+				}
+				if aiResult.Type == "" {
+					aiResult.Type = parsed.Type
+				}
+			}
+			parsed = aiResult
+			parserName = "ai_parser"
+		}
+	}
 	if parsed == nil {
 		return s.failed(ctx, raw, "notification format not recognized", parserName)
 	}
@@ -68,81 +85,53 @@ func (s *Service) failed(ctx context.Context, raw Notification, reason, parserNa
 }
 
 func (s *Service) parse(ctx context.Context, input parser.Input) (*parser.Result, string, error) {
-	var result *parser.Result
-	var err error
-
-	if s.ruleRepository != nil {
-		rules, ruleErr := s.ruleRepository.ListActiveParserRules(ctx)
-		if ruleErr != nil {
-			return nil, "rule", ruleErr
-		}
-		result, err = parser.NewRegistry().ParseWithRules(input, func(value parser.Input) (*parser.Result, bool, error) {
-			matched := rule.FirstParserRule(rules, value.SourceApp, strings.Join([]string{value.Title, value.Text}, " "))
-			if matched == nil {
-				return nil, false, nil
-			}
-			if strings.EqualFold(matched.Action, "IGNORE") {
-				return &parser.Result{Ignore: true, ParseStatus: "IGNORED", Confidence: matched.Confidence}, true, nil
-			}
-			if !strings.EqualFold(matched.Action, "PARSE") || matched.TransactionType == nil {
-				return nil, false, nil
-			}
-			amount, ok := parser.ExtractBestAmount(strings.Join([]string{value.Title, value.Text}, " "))
-			if !ok {
-				return nil, false, nil
-			}
-			typ := strings.ToLower(strings.TrimSpace(*matched.TransactionType))
-			if typ != "income" && typ != "expense" && typ != "transfer" {
-				return nil, false, nil
-			}
-			parsedResult := &parser.Result{Type: typ, Amount: amount, ParseStatus: "RULE", Confidence: matched.Confidence, CategoryID: matched.CategoryID}
-			if matched.Merchant != nil {
-				parsedResult.Merchant = *matched.Merchant
-			}
-			return parsedResult, true, nil
-		})
-		if err != nil {
-			return nil, "rule", err
-		}
-		if result != nil && (result.ParseStatus == "RULE" || result.ParseStatus == "IGNORED") {
-			return result, "rule", nil
-		}
-	} else {
-		result, err = parser.Parse(input)
+	if s.ruleRepository == nil {
+		result, err := parser.Parse(input)
+		return result, "parser", err
 	}
-
-	// If regex already extracted a confident result with a specific merchant, use it
-	if result != nil && !result.Ignore && strings.TrimSpace(result.Merchant) != "" {
-		return result, "parser", nil
+	rules, err := s.ruleRepository.ListActiveParserRules(ctx)
+	if err != nil {
+		return nil, "rule", err
 	}
-
-	// Fallback to AI Parser if regex format was unrecognized or merchant was missing
-	if s.aiParser != nil {
-		aiResult, aiErr := s.aiParser.Parse(ctx, input)
-		if aiErr == nil && aiResult != nil && aiResult.Amount > 0 {
-			if result != nil {
-				if aiResult.SourceAccountName == "" {
-					aiResult.SourceAccountName = result.SourceAccountName
-				}
-				if aiResult.DestinationAccountName == "" {
-					aiResult.DestinationAccountName = result.DestinationAccountName
-				}
-				if aiResult.Type == "" {
-					aiResult.Type = result.Type
-				}
-			}
-			return aiResult, "ai_parser", nil
+	result, err := parser.NewRegistry().ParseWithRules(input, func(value parser.Input) (*parser.Result, bool, error) {
+		matched := rule.FirstParserRule(rules, value.SourceApp, strings.Join([]string{value.Title, value.Text}, " "))
+		if matched == nil {
+			return nil, false, nil
 		}
+		if strings.EqualFold(matched.Action, "IGNORE") {
+			return &parser.Result{Ignore: true, ParseStatus: "IGNORED", Confidence: matched.Confidence}, true, nil
+		}
+		if !strings.EqualFold(matched.Action, "PARSE") || matched.TransactionType == nil {
+			return nil, false, nil
+		}
+		amount, ok := parser.ExtractBestAmount(strings.Join([]string{value.Title, value.Text}, " "))
+		if !ok {
+			return nil, false, nil
+		}
+		typ := strings.ToLower(strings.TrimSpace(*matched.TransactionType))
+		if typ != "income" && typ != "expense" && typ != "transfer" {
+			return nil, false, nil
+		}
+		parsedResult := &parser.Result{Type: typ, Amount: amount, ParseStatus: "RULE", Confidence: matched.Confidence, CategoryID: matched.CategoryID}
+		if matched.Merchant != nil {
+			parsedResult.Merchant = *matched.Merchant
+		}
+		return parsedResult, true, nil
+	})
+	if err != nil {
+		return nil, "rule", err
 	}
-
-	if result != nil {
-		return result, "parser", nil
+	if result != nil && (result.ParseStatus == "RULE" || result.ParseStatus == "IGNORED") {
+		return result, "rule", nil
 	}
-	return nil, "parser", err
+	return result, "parser", nil
 }
 
 func (s *Service) applyCategoryRule(ctx context.Context, result *parser.Result) error {
-	if result.Type != "expense" && result.Type != "income" {
+	// Category rules are merchant-spending rules. Applying one to income can
+	// replace the parser's income category with an expense category when the
+	// sender name happens to match a previously learned merchant rule.
+	if result.Type != "expense" {
 		return nil
 	}
 

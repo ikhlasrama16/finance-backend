@@ -8,12 +8,18 @@ import (
 	"time"
 )
 
-const promptVersion = "v1"
+const promptVersion = "v2"
 
-const systemPrompt = `Anda adalah asisten laporan keuangan pribadi. Jawab dalam bahasa Indonesia.
-Gunakan hanya statistik yang diberikan. Jangan mengarang transaksi atau nominal, dan jangan menghitung ulang atau mengubah total yang diberikan.
-Jelaskan pola dan observasi secara ringkas, tanpa bahasa menghakimi atau kepastian tentang motivasi pengguna.
-Bedakan observasi dan saran praktis. Susun jawaban dengan bagian: Ringkasan, Pola utama, Hal yang perlu diperhatikan, dan Saran praktis.`
+const systemPrompt = `Anda adalah asisten analisis keuangan pribadi yang cerdas, objektif, dan suportif. Jawab dalam bahasa Indonesia.
+Gunakan HANYA statistik dan data yang diberikan. Jangan mengarang transaksi atau angka baru, dan jangan mengubah total atau nilai yang telah disediakan.
+Analisis secara seimbang kedua sisi: PEMASUKAN dan PENGELUARAN, serta arus kas bersih (net cashflow / surplus-defisit).
+Jelaskan pola dan observasi secara ringkas, profesional, tanpa bahasa menghakimi.
+Susun jawaban secara terstruktur dengan format Markdown yang rapi:
+1. **Ringkasan Arus Kas**: Evaluasi rasio pemasukan vs pengeluaran dan surplus/defisit periode ini.
+2. **Analisis Pemasukan**: Sumber pemasukan utama, kestabilan, dan perbandingannya jika ada data periode lalu.
+3. **Pola Pengeluaran & Merchant**: Kategori dan penerima/merchant pengeluaran terbesar yang dominan.
+4. **Hal yang Perlu Diperhatikan**: Anomali, defisit, atau ketergantungan belanja pada pos tertentu.
+5. **Rekomendasi Praktis**: Langkah konkret dan realistis untuk mengoptimalkan kesehatan finansial pengguna.`
 
 type promptData struct {
 	Period                   string          `json:"period"`
@@ -26,8 +32,14 @@ type promptData struct {
 	PreviousPeriodExpense    int64           `json:"previous_period_expense"`
 	ExpenseChangeAmount      int64           `json:"expense_change_amount"`
 	ExpenseChangePercentage  float64         `json:"expense_change_percentage"`
+	PreviousPeriodIncome    int64           `json:"previous_period_income,omitempty"`
+	IncomeChangeAmount      int64           `json:"income_change_amount,omitempty"`
+	IncomeChangePercentage  float64         `json:"income_change_percentage,omitempty"`
+	NetCashflowChangeAmount int64           `json:"net_cashflow_change_amount,omitempty"`
 	ExpenseByCategory        []CategoryTotal `json:"expense_by_category"`
+	IncomeByCategory         []CategoryTotal `json:"income_by_category,omitempty"`
 	TopMerchants             []MerchantTotal `json:"top_merchants"`
+	TopIncomeSources         []MerchantTotal `json:"top_income_sources,omitempty"`
 }
 
 func BuildPrompt(response Response) (string, error) {
@@ -42,8 +54,14 @@ func BuildPrompt(response Response) (string, error) {
 		PreviousPeriodExpense:    response.Comparison.PreviousPeriodExpense,
 		ExpenseChangeAmount:      response.Comparison.ExpenseChangeAmount,
 		ExpenseChangePercentage:  response.Comparison.ExpenseChangePercentage,
+		PreviousPeriodIncome:    response.Comparison.PreviousPeriodIncome,
+		IncomeChangeAmount:      response.Comparison.IncomeChangeAmount,
+		IncomeChangePercentage:  response.Comparison.IncomeChangePercentage,
+		NetCashflowChangeAmount: response.Comparison.NetCashflowChangeAmount,
 		ExpenseByCategory:        response.ExpenseByCategory,
+		IncomeByCategory:         response.IncomeByCategory,
 		TopMerchants:             response.TopMerchants,
+		TopIncomeSources:         response.TopIncomeSources,
 	}
 	encoded, err := json.Marshal(data)
 	if err != nil {

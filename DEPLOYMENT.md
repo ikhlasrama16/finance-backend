@@ -12,6 +12,9 @@ INGEST_API_KEY=...
 OPENROUTER_API_KEY=...
 OPENROUTER_MODEL=openrouter/free
 CORS_ALLOWED_ORIGINS=https://app.example.com
+# First deployment only; remove AUTH_BOOTSTRAP_PASSWORD after the owner is created.
+AUTH_BOOTSTRAP_EMAIL=owner@example.com
+AUTH_BOOTSTRAP_PASSWORD=use-a-long-unique-password
 ```
 
 `CORS_ALLOWED_ORIGINS` is a comma-separated list. In production, only listed origins receive CORS headers. Keep it empty when browser-origin access is not needed. Secrets must be supplied by the deployment environment and must not be committed.
@@ -31,6 +34,8 @@ CORS_ALLOWED_ORIGINS=https://app.example.com
    007_seed_reconciliation_categories.sql
    008_create_ai_reports.sql
    009_add_detached_raw_notification_status.sql
+   010_create_ai_report_jobs.sql
+   011_create_auth_tables.sql
    ```
 
 3. Start the application with the same `DATABASE_URL`.
@@ -47,6 +52,8 @@ psql "$DATABASE_URL" -f migrations/006_seed_legacy_master_data.sql
 psql "$DATABASE_URL" -f migrations/007_seed_reconciliation_categories.sql
 psql "$DATABASE_URL" -f migrations/008_create_ai_reports.sql
 psql "$DATABASE_URL" -f migrations/009_add_detached_raw_notification_status.sql
+psql "$DATABASE_URL" -f migrations/010_create_ai_report_jobs.sql
+psql "$DATABASE_URL" -f migrations/011_create_auth_tables.sql
 go run ./cmd/api
 ```
 
@@ -54,8 +61,28 @@ Never edit an already-applied migration. Add a new numbered migration for later 
 
 The liveness endpoint is `GET /api/v1/health`; PostgreSQL readiness is checked by `GET /api/v1/ready`.
 
+## Web authentication
+
+All browser API endpoints require a valid `finance_session` cookie, except health/readiness, `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, and the MacroDroid ingestion endpoint. Create the first owner by setting both `AUTH_BOOTSTRAP_EMAIL` and `AUTH_BOOTSTRAP_PASSWORD` for one startup after migration `011`; remove `AUTH_BOOTSTRAP_PASSWORD` immediately after the account is created.
+
+The login flow is:
+
+```text
+POST /api/v1/auth/login  {"email":"owner@example.com","password":"..."}
+GET  /api/v1/auth/me
+POST /api/v1/auth/logout
+```
+
+Login issues an HttpOnly session cookie. The frontend must not store an API token in localStorage. MacroDroid continues to send its separate `INGEST_API_KEY` bearer token to `POST /api/v1/notifications`.
+
 ## AI report configuration
 
 `POST /api/v1/reports/ai` always returns deterministic PostgreSQL statistics when aggregation succeeds. `OPENROUTER_API_KEY` is only needed to generate the optional natural-language `ai` content; without it or during an OpenRouter outage, that field reports `status: "unavailable"`.
 
 Report dates use the `Asia/Jakarta` calendar and `transactions.occurred_at`. Daily covers the current local day. Weekly covers Monday through the current local day and compares the same weekdays one week earlier. Monthly covers the first day of the current month through the current local day and compares the same month-to-date dates in the previous month (clamped to its last day). Custom periods compare against an immediately preceding window of the same number of calendar days.
+
+## AI report v2
+
+`GET /api/v2/reports/statistics` accepts `start_date`, `end_date`, and optional `comparison` (`none`, `previous_equivalent`, `previous_calendar_week`, `previous_calendar_month`, or `custom`). Custom comparison uses `comparison_start_date` and `comparison_end_date`. It returns deterministic statistics immediately with a `snapshot_hash`.
+
+Submit that hash to `POST /api/v2/reports/ai` together with the same date fields and a JSON `comparison` object. The API returns a job immediately; poll `GET /api/v2/reports/ai/{id}` until its status is `complete` or `failed`. The report worker runs with the API process and stores the exact statistics snapshot used for each AI analysis.

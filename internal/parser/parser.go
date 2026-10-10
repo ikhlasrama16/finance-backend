@@ -3,7 +3,7 @@ package parser
 type Registry struct{ parsers []Parser }
 
 func NewRegistry() *Registry {
-	return &Registry{parsers: []Parser{qrisParser{}, shopeePayParser{}, seaBankParser{}, shopeeParser{}, genericParser{}}}
+	return &Registry{parsers: []Parser{qrisParser{}, shopeePayParser{}, seaBankParser{}, jagoParser{}, shopeeParser{}, genericParser{}}}
 }
 func (r *Registry) Parse(input Input) (*Result, error) {
 	return r.ParseWithRules(input, nil)
