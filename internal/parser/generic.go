@@ -10,8 +10,28 @@ type genericParser struct{}
 var genericMerchantRE = regexp.MustCompile(`(?i)\b(?:kepada|ke)\b\s+(.+?)(?:\s+pada|\s+sebesar|\.|$)`)
 var genericFromRE = regexp.MustCompile(`(?i)\bdari\b\s+(.+?)(?:\s+pada|\s+sebesar|\.|$)`)
 var genericAtRE = regexp.MustCompile(`(?i)\bdi\b\s+(.+?)(?:\s+sebesar|\.|$)`)
-var screenReceiptRE = regexp.MustCompile(`(?i)(?:rincian\s+transaksi|bukti\s+transaksi)\s*[\r\n]+([^\r\n]+)`)
 var genericIncomingFundsRE = regexp.MustCompile(`(?is)\bdana\b.{0,80}\bmasuk\b`)
+
+func isValidMerchantName(name string) bool {
+	name = strings.TrimSpace(name)
+	if len(name) < 2 {
+		return false
+	}
+	letterCount := 0
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+			letterCount++
+		}
+	}
+	if letterCount < 2 {
+		return false
+	}
+	lower := strings.ToLower(name)
+	if containsAny(lower, "rincian", "transaksi", "berhasil", "sukses", "bantuan", "bagikan", "ulangi", "kantong utama", "butuh bantuan") {
+		return false
+	}
+	return true
+}
 
 func (genericParser) CanParse(input Input) bool { return true }
 func (genericParser) Parse(input Input) (*Result, error) {
@@ -26,24 +46,19 @@ func (genericParser) Parse(input Input) (*Result, error) {
 	}
 	destination := ""
 	merchant := capture(genericMerchantRE, text)
-	if merchant == "" {
+	if !isValidMerchantName(merchant) {
 		merchant = capture(genericAtRE, text)
 	}
-	if merchant == "" {
-		if m := screenReceiptRE.FindStringSubmatch(text); len(m) > 1 {
-			candidate := strings.TrimSpace(m[1])
-			if !strings.EqualFold(candidate, "berhasil") && !strings.EqualFold(candidate, "sukses") && !strings.Contains(candidate, "Rp") {
-				merchant = candidate
-			}
-		}
+	if !isValidMerchantName(merchant) {
+		merchant = ""
 	}
 	if owned := detectOwnedAccount(merchant); owned != "" {
 		destination = owned
 	}
 	if genericIncomingFundsRE.MatchString(text) || containsAny(normalized, "transfer masuk", "menerima dana", "menerima transfer", "menerima uang", "uang masuk", "saldo bertambah", "isi saldo berhasil", "top up berhasil") || strings.Contains(text, "+Rp") || strings.Contains(text, "+ Rp") {
 		from := capture(genericFromRE, text)
-		if from == "" && merchant != "" {
-			from = merchant
+		if !isValidMerchantName(from) {
+			from = ""
 		}
 		if owned := detectOwnedAccount(from); owned != "" && isOwnedAccount(source) && owned != source {
 			return &Result{Type: "transfer", Amount: amount, SourceAccountName: owned, DestinationAccountName: source, ParseStatus: "AUTO", Confidence: 0.85}, nil

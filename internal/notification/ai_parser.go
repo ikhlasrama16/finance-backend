@@ -51,9 +51,9 @@ func NewOpenRouterAIFallbackParserWithClient(apiKey, model, endpoint string, cli
 	}
 }
 
-const aiParserSystemPrompt = `You are a financial notification parser assistant.
-Analyze incoming smartphone push notifications from Indonesian banking and financial apps (e.g. SeaBank, ShopeePay, Bank Jago, Mandiri, BRI, Flip).
-Determine whether the notification represents an ACTUAL financial transaction (money moved, debited, credited, transfer, payment, refund) or if it is a NON-TRANSACTION / PROMOTION / CHAT / REMINDER / FAILED TRANSACTION.
+const aiParserSystemPrompt = `You are a financial notification and receipt parser assistant.
+Analyze incoming smartphone push notifications or OCR text from transaction receipts / screens (e.g. Bank Jago, SeaBank, ShopeePay, BCA, Mandiri, BRI, Flip).
+Determine whether the text represents an ACTUAL completed financial transaction (money moved, debited, credited, transfer, payment, refund) or if it is a NON-TRANSACTION / PROMOTION / CHAT / REMINDER / FAILED TRANSACTION.
 
 Return ONLY a valid JSON object matching this schema:
 {
@@ -74,9 +74,9 @@ Rules:
 2. If the notification is a real completed financial transaction:
    Set "is_financial_transaction": true.
    - "type" MUST be "income", "expense", or "transfer".
-   - "amount" MUST be a positive integer in IDR (e.g. convert "Rp 15.000" to 15000).
-   - "source_account" / "destination_account": Standard owned account names if recognized ("SeaBank", "ShopeePay", "Bank Jago", "Mandiri", "BRI", "Flip").
-   - "merchant": Counterparty name, store name, or recipient/sender name.
+   - "amount" MUST be a positive integer in IDR (e.g. convert "-Rp9.300.000" to 9300000, "Rp 15.000" to 15000).
+   - "source_account" / "destination_account": Standard owned account names if recognized ("SeaBank", "ShopeePay", "Bank Jago", "Mandiri", "BRI", "Flip"). Note: "Kantong Utama" or ID with "JAG" belongs to "Bank Jago".
+   - "merchant": Counterparty name, store name, or recipient/sender name (e.g. "MUHAMAD FATONY ANWAR", "Indomaret", "Kopi Kenangan"). Clean up bank account numbers and codes. Ignore status bar noise (e.g. time, battery %, "!!.! 69"). NEVER use generic UI words like "Transaksi", "Rincian Transaksi", "Kantong Utama".
    - "confidence": Confidence score between 0.0 and 1.0.`
 
 type aiParserPayload struct {
