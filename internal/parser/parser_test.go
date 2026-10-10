@@ -224,6 +224,19 @@ func TestMustParseRegressionCases(t *testing.T) {
 			merchant:    "IDM TCDJ IPDA TUT H",
 			description: "Pembayaran QRIS ShopeePay",
 		},
+		{
+			name: "ShopeePay QRIS Misaligned Date OCR",
+			input: Input{
+				SourceApp: "Transaksi",
+				Title:     "Rincian Pembayaran",
+				Text:      "-Rp32.700\nBerhasil\nTotal Penghematan Rp50\nAplikasi ShopeePay 10.10 Saldo Kaget 100JT\nRincian Pesanan\nBayar Ke QRIS IDM TCDJ IPDA TUT H\nWaktu Selesai\nKamu Membayar 27 Sep 2026 19:38\nRp32.700\nSplit Bill",
+			},
+			typ:         "expense",
+			amount:      32700,
+			source:      "ShopeePay",
+			merchant:    "IDM TCDJ IPDA TUT H",
+			description: "Pembayaran QRIS ShopeePay",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

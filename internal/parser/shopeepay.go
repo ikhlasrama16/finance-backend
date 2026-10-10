@@ -11,10 +11,27 @@ var shopeeAmountRE = regexp.MustCompile(`(?i)pengisian saldo sebesar\s*rp\s*([\d
 var shopeeBiFastTransferInRE = regexp.MustCompile(`(?i)(.+?)\s+mengirimkan\s+dana\s+sebesar\s+(?:rp\s*)?([\d.,]+)\s+ke\s+shopeepay`)
 var shopeePaymentSuccessRE = regexp.MustCompile(`(?i)pembayaran\s+sebesar\s+(?:rp\s*)?([\d.,]+)\s+dengan\s+shopeepay\s+telah\s+berhasil`)
 var (
-	shopeeKamuMembayarRE = regexp.MustCompile(`(?i)(?:kamu\s+membayar|total\s+pembayaran|jumlah\s+pembayaran)\s*(?:rp\s*)?([\d.,]+)`)
-	shopeeTopAmountRE    = regexp.MustCompile(`(?i)(?:^|[\r\n\s])\-?\s*rp\s*([\d.,]+)\s*(?:[\r\n\s]|berhasil)`)
+	shopeeMinusRpRE      = regexp.MustCompile(`(?i)\-\s*rp\.?\s*([\d.,]+)`)
+	shopeeTopAmountRE    = regexp.MustCompile(`(?i)(?:rincian\s+pembayaran[^\d\n\r]*|[\r\n]|^)\s*\-?\s*rp\.?\s*([\d.,]+)`)
+	shopeeKamuMembayarRE = regexp.MustCompile(`(?i)(?:kamu\s+membayar|total\s+pembayaran|jumlah\s+pembayaran)\s*[:\-\s]*\s*rp\.?\s*([\d.,]+)`)
 	shopeeBayarKeRE      = regexp.MustCompile(`(?i)\bbayar\s+ke\b\s*[:\-]?\s*(.+?)(?:\s*>\s*|\s*\r?\n|\s+waktu\b|\s+kamu\s+membayar|$)`)
 )
+
+func shopeePayReceiptAmount(text string) int64 {
+	if a := amountFromRegex(text, shopeeMinusRpRE); a > 100 {
+		return a
+	}
+	if a := amountFromRegex(text, shopeeTopAmountRE); a > 100 {
+		return a
+	}
+	if a := amountFromRegex(text, shopeeKamuMembayarRE); a > 100 {
+		return a
+	}
+	if a, ok := extractBestAmount(text); ok && a > 100 {
+		return a
+	}
+	return 0
+}
 
 func (shopeePayParser) CanParse(input Input) bool {
 	source := accountFromSource(input.SourceApp)
@@ -34,13 +51,7 @@ func (shopeePayParser) Parse(input Input) (*Result, error) {
 
 	// ShopeePay screen receipt (Rincian Pembayaran / Bayar Ke)
 	if containsAny(normalized, "rincian pembayaran", "kamu membayar", "bayar ke") {
-		amount := amountFromRegex(text, shopeeKamuMembayarRE)
-		if amount == 0 {
-			amount = amountFromRegex(text, shopeeTopAmountRE)
-		}
-		if amount == 0 {
-			amount, _ = extractBestAmount(text)
-		}
+		amount := shopeePayReceiptAmount(text)
 		if amount > 0 {
 			rawMerchant := capture(shopeeBayarKeRE, text)
 			cleanMerchant := cleanReceiptParty(rawMerchant)
