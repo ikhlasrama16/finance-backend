@@ -61,3 +61,12 @@ func isOwnedAccount(name string) bool {
 	}
 	return false
 }
+
+func IsOwnerName(name string) bool {
+	return isOwnerName(name)
+}
+
+func isOwnerName(name string) bool {
+	n := strings.ToLower(name)
+	return strings.Contains(n, "ikhlas") || strings.Contains(n, "ramadhan") || strings.Contains(n, "901647608380")
+}

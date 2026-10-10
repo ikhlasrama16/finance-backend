@@ -132,6 +132,7 @@ func TestMustParseRegressionCases(t *testing.T) {
 		source      string
 		destination string
 		merchant    string
+		description string
 	}{
 		{
 			name:     "SeaBank QRIS BAKSO ZAKI WONOGIRI",
@@ -173,6 +174,43 @@ func TestMustParseRegressionCases(t *testing.T) {
 			destination: "SeaBank",
 			merchant:    "JANE DOE",
 		},
+		{
+			name: "SeaBank Receipt Incoming Takoyaki",
+			input: Input{
+				SourceApp: "Transaksi",
+				Title:     "Rincian Transaksi",
+				Text: "Rp 14.000\nDari Dhevia Leuys Thiaqufyan >\nSeaBank: 901886978210\nKe Muhammad Ikhlas Ramadhan\nSeaBank: 901647608380\nJumlah Transfer Rp 14.000\nNo. Transaksi 2026100843509676168114724\nWaktu Transaksi 08 Okt 2026, 17:52\nCatatan\nTakoyaki\nButuh Bantuan?",
+			},
+			typ:         "income",
+			amount:      14000,
+			destination: "SeaBank",
+			merchant:    "Dhevia Leuys Thiaqufyan",
+			description: "Takoyaki",
+		},
+		{
+			name: "SeaBank Receipt Outgoing Transfer",
+			input: Input{
+				SourceApp: "Transaksi",
+				Title:     "Rincian Transaksi",
+				Text: "Rp 23.500\nDari Muhammad Ikhlas Ramadhan\nSeaBank: 901647608380\nKe Dhevia Leuys Thiaqufyan >\nSeaBank: 901886978210\nJumlah Transfer Rp 23.500\nNo. Transaksi 2026100843509679643981061\nWaktu Transaksi 08 Okt 2026, 20:04\nButuh Bantuan?",
+			},
+			typ:      "expense",
+			amount:   23500,
+			source:   "SeaBank",
+			merchant: "Dhevia Leuys Thiaqufyan",
+		},
+		{
+			name: "Bank Jago Uang Keluar Receipt",
+			input: Input{
+				SourceApp: "Transaksi",
+				Title:     "Uang Keluar",
+				Text:      "Kantong Utama Uang Keluar Rp 50.000 ke John Doe pada 08 Okt 2026",
+			},
+			typ:      "expense",
+			amount:   50000,
+			source:   "Bank Jago",
+			merchant: "John Doe",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -185,6 +223,9 @@ func TestMustParseRegressionCases(t *testing.T) {
 			}
 			if tt.merchant != "" && got.Merchant != tt.merchant {
 				t.Fatalf("got merchant %q, want %q", got.Merchant, tt.merchant)
+			}
+			if tt.description != "" && got.Description != tt.description {
+				t.Fatalf("got description %q, want %q", got.Description, tt.description)
 			}
 		})
 	}

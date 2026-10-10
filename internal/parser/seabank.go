@@ -12,12 +12,131 @@ var seaReferenceRE = regexp.MustCompile(`(?i)\bref(?:erence)?\.?\s*(?:number|no\
 var incomingFromRE = regexp.MustCompile(`(?i)\bdari\b\s+(.+?)(?:\s+pada|\s+sebesar|\.|$)`)
 var paymentToRE = regexp.MustCompile(`(?i)\b(?:kepada|ke)\b\s+(.+?)(?:\s+pada|\s+sebesar|\.|$)`)
 var bayarInstanMerchantRE = regexp.MustCompile(`(?i)(?:bayar\s+instan[^\w]+)?pembayaran\s+([a-z0-9]+)\s+kamu\s+sebesar`)
+var (
+	seaTransferAmountRE = regexp.MustCompile(`(?i)(?:jumlah\s+transfer|total\s+transfer|nominal)\s*(?:rp\s*)?([\d.,]+)`)
+	seaReceiptDariRE    = regexp.MustCompile(`(?i)\bdari\b\s*[:\-]?\s*(.+?)(?:\s*>\s*|\s*\r?\n|\s+seabank:|\s+ke\b|\s+jumlah\b|$)`)
+	seaReceiptKeRE      = regexp.MustCompile(`(?i)\bke\b\s*[:\-]?\s*(.+?)(?:\s*>\s*|\s*\r?\n|\s+seabank:|\s+jumlah\b|\s+no\.|\s+waktu|$)`)
+	seaReceiptCatatanRE = regexp.MustCompile(`(?i)\bcatatan\b\s*[:\-]?\s*([^\r\n]+?)(?:\s*\r?\n|\s+butuh\b|$)`)
+)
+
+func cleanReceiptParty(val string) string {
+	val = strings.TrimSpace(val)
+	val = strings.Trim(val, " \t\r\n.,;:->")
+	if idx := strings.Index(strings.ToLower(val), "seabank"); idx > 0 {
+		val = strings.TrimSpace(val[:idx])
+		val = strings.Trim(val, " \t\r\n.,;:->")
+	}
+	return val
+}
 
 func (seaBankParser) CanParse(input Input) bool {
-	return accountFromSource(input.SourceApp) == "SeaBank"
+	source := accountFromSource(input.SourceApp)
+	if source == "SeaBank" {
+		return true
+	}
+	if isOwnedAccount(source) {
+		return false
+	}
+	text := strings.ToLower(combinedText(input))
+	return strings.Contains(text, "seabank")
 }
+
 func (seaBankParser) Parse(input Input) (*Result, error) {
 	text, normalized := combinedText(input), normalizedInput(input)
+
+	// Screen receipt / Rincian Transaksi check
+	if containsAny(normalized, "rincian transaksi", "jumlah transfer") || (strings.Contains(normalized, "dari") && strings.Contains(normalized, "ke") && strings.Contains(normalized, "seabank")) {
+		amount := amountFromRegex(text, seaTransferAmountRE)
+		if amount == 0 {
+			amount = seaBankAmount(text)
+		}
+		if amount > 0 {
+			sender := cleanReceiptParty(capture(seaReceiptDariRE, text))
+			recipient := cleanReceiptParty(capture(seaReceiptKeRE, text))
+
+			note := cleanReceiptParty(capture(seaReceiptCatatanRE, text))
+			if strings.EqualFold(note, "butuh bantuan") || strings.HasPrefix(strings.ToLower(note), "butuh bantuan") {
+				note = ""
+			}
+
+			// Case 1: User is recipient -> Income
+			if isOwnerName(recipient) {
+				desc := "Transfer Masuk SeaBank"
+				if note != "" {
+					desc = note
+				}
+				if owned := detectOwnedAccount(sender); owned != "" && owned != "SeaBank" {
+					return &Result{
+						Type:                   "transfer",
+						Amount:                 amount,
+						SourceAccountName:      owned,
+						DestinationAccountName: "SeaBank",
+						Description:            desc,
+						ParseStatus:            "AUTO",
+						Confidence:             0.98,
+					}, nil
+				}
+				return &Result{
+					Type:                   "income",
+					Amount:                 amount,
+					DestinationAccountName: "SeaBank",
+					Merchant:               sender,
+					CategoryName:           "Pemasukan",
+					Description:            desc,
+					ParseStatus:            "AUTO",
+					Confidence:             0.95,
+				}, nil
+			}
+
+			// Case 2: User is sender -> Expense (or Transfer to owned account)
+			if isOwnerName(sender) {
+				desc := "Transfer Keluar SeaBank"
+				if note != "" {
+					desc = note
+				}
+				if owned := detectOwnedAccount(recipient); owned != "" && owned != "SeaBank" {
+					return &Result{
+						Type:                   "transfer",
+						Amount:                 amount,
+						SourceAccountName:      "SeaBank",
+						DestinationAccountName: owned,
+						Description:            desc,
+						ParseStatus:            "AUTO",
+						Confidence:             0.98,
+					}, nil
+				}
+				return &Result{
+					Type:              "expense",
+					Amount:            amount,
+					SourceAccountName: "SeaBank",
+					Merchant:          recipient,
+					CategoryName:      "Belum Dikategorikan",
+					Description:       desc,
+					ParseStatus:       "AUTO",
+					Confidence:        0.95,
+				}, nil
+			}
+
+			// Case 3: Neither explicitly matched isOwnerName, but recipient exists
+			if recipient != "" {
+				desc := "Transfer SeaBank"
+				if note != "" {
+					desc = note
+				}
+				return &Result{
+					Type:              "expense",
+					Amount:            amount,
+					SourceAccountName: "SeaBank",
+					Merchant:          recipient,
+					CategoryName:      "Belum Dikategorikan",
+					Description:       desc,
+					ParseStatus:       "AUTO",
+					Confidence:        0.80,
+				}, nil
+			}
+		}
+	}
+
 	if containsAny(normalized, "top up berhasil") && containsAny(normalized, "top up shopeepay", "shopeepay") {
 		amount := seaBankAmount(text)
 		return &Result{Type: "transfer", Amount: amount, SourceAccountName: "SeaBank", DestinationAccountName: "ShopeePay", Merchant: "ShopeePay", Description: "Top Up ShopeePay", ParseStatus: "AUTO", Confidence: 0.99}, nil

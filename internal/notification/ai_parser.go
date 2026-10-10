@@ -77,7 +77,14 @@ Rules:
    - "amount" MUST be a positive integer in IDR (e.g. convert "-Rp9.300.000" to 9300000, "Rp 15.000" to 15000).
    - "source_account" / "destination_account": Standard owned account names if recognized ("SeaBank", "ShopeePay", "Bank Jago", "Mandiri", "BRI", "Flip"). Note: "Kantong Utama" or ID with "JAG" belongs to "Bank Jago".
    - "merchant": Counterparty name, store name, or recipient/sender name (e.g. "MUHAMAD FATONY ANWAR", "Indomaret", "Kopi Kenangan"). Clean up bank account numbers and codes. Ignore status bar noise (e.g. time, battery %, "!!.! 69"). NEVER use generic UI words like "Transaksi", "Rincian Transaksi", "Kantong Utama".
-   - "confidence": Confidence score between 0.0 and 1.0.`
+   - "confidence": Confidence score between 0.0 and 1.0.
+3. Owner / Account Identity Rules:
+   The primary account owner / user is "Muhammad Ikhlas Ramadhan" (also spelled "Muhamad Ikhlas Ramadhan", SeaBank account 901647608380).
+   - In transaction receipts/screens showing "Dari" (Sender) and "Ke" (Recipient):
+     * If user is recipient ("Ke: Muhammad Ikhlas Ramadhan"), this is ALWAYS an "income" transaction!
+       Set "type": "income", "destination_account": "SeaBank", "merchant": sender's name (from "Dari"), and "description": the note/catatan if present.
+     * If user is sender ("Dari: Muhammad Ikhlas Ramadhan"), this is an "expense" transaction (or "transfer" if recipient is owned account)!
+       Set "type": "expense", "source_account": "SeaBank", "merchant": recipient's name (from "Ke"), and "description": the note/catatan if present.`
 
 type aiParserPayload struct {
 	IsFinancialTransaction bool    `json:"is_financial_transaction"`

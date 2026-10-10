@@ -2,16 +2,25 @@ package parser
 
 import (
 	"regexp"
+	"strings"
 )
 
 type jagoParser struct{}
 
 var jagoAmountRE = regexp.MustCompile(`(?i)(?:transfer|uang|dana|sebesar|senilai|pembayaran)\s*(?:rp\s*)?([\d.,]+)`)
-var jagoPaymentToRE = regexp.MustCompile(`(?i)\b(?:kepada|ke)\b\s+(.+?)(?:\s+pada|\s+sebesar|\.|\bbutuh\b|$)`)
+var jagoPaymentToRE = regexp.MustCompile(`(?i)\b(?:kepada|ke|dikirim ke)\b\s+(.+?)(?:\s+pada|\s+sebesar|\.|\bbutuh\b|$)`)
 var jagoIncomingFromRE = regexp.MustCompile(`(?i)\bdari\b\s+(.+?)(?:\s+pada|\s+sebesar|\.|\bke\b|\bbutuh\b|$)`)
 
 func (jagoParser) CanParse(input Input) bool {
-	return accountFromSource(input.SourceApp) == "Bank Jago"
+	source := accountFromSource(input.SourceApp)
+	if source == "Bank Jago" {
+		return true
+	}
+	if isOwnedAccount(source) {
+		return false
+	}
+	text := strings.ToLower(combinedText(input))
+	return strings.Contains(text, "bank jago") || strings.Contains(text, "kantong utama") || strings.Contains(text, "kantong jago") || strings.Contains(text, "jago")
 }
 
 func jagoExtractAmount(text string) int64 {
@@ -56,7 +65,7 @@ func (jagoParser) Parse(input Input) (*Result, error) {
 	}
 
 	// Outgoing transfer / transfer keluar
-	if containsAny(normalized, "melakukan transfer", "transfer berhasil", "transfer keluar", "transfer senilai", "transfer sebesar", "kirim uang") {
+	if containsAny(normalized, "uang keluar", "melakukan transfer", "transfer berhasil", "transfer keluar", "transfer senilai", "transfer sebesar", "kirim uang") {
 		amount := jagoExtractAmount(text)
 		if amount == 0 {
 			return nil, nil
