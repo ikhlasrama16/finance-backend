@@ -44,13 +44,14 @@ type CreateInput struct {
 	OccurredAt           string  `json:"occurred_at"`
 }
 
-// UpdateInput deliberately allows only correction fields. Ledger structure
-// and origin metadata remain immutable through the PATCH endpoint.
+// UpdateInput allows correction fields including account attribution.
 type UpdateInput struct {
-	CategoryID  *int64  `json:"category_id"`
-	Merchant    *string `json:"merchant"`
-	Description *string `json:"description"`
-	LearnRule   *bool   `json:"learn_rule,omitempty"`
+	SourceAccountID      *int64  `json:"source_account_id"`
+	DestinationAccountID *int64  `json:"destination_account_id"`
+	CategoryID           *int64  `json:"category_id"`
+	Merchant             *string `json:"merchant"`
+	Description          *string `json:"description"`
+	LearnRule            *bool   `json:"learn_rule,omitempty"`
 }
 
 type DeleteResult struct {

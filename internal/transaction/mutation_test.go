@@ -79,6 +79,28 @@ func TestUpdateTransactionCategoryAndAuditMetadata(t *testing.T) {
 	}
 }
 
+func TestUpdateTransactionAccountAttribution(t *testing.T) {
+	newSourceID := int64(5)
+	repository := &fakeMutationRepository{transactions: map[int64]Transaction{
+		1: {ID: 1, Type: "expense", Amount: 37000, SourceAccountID: pointer(int64(3)), Source: "notification"},
+		2: {ID: 2, Type: "transfer", Amount: 10000, SourceAccountID: pointer(int64(1)), DestinationAccountID: pointer(int64(2))},
+	}}
+	service := NewService(repository, fakeCategoryRepository{})
+	updated, err := service.Update(context.Background(), 1, UpdateInput{SourceAccountID: &newSourceID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.SourceAccountID == nil || *updated.SourceAccountID != newSourceID || repository.updated.SourceAccountID == nil || *repository.updated.SourceAccountID != newSourceID {
+		t.Fatalf("source account was not corrected: %#v", updated)
+	}
+
+	sameAccountID := int64(2)
+	_, err = service.Update(context.Background(), 2, UpdateInput{SourceAccountID: &sameAccountID})
+	if !errors.Is(err, ErrSameAccount) {
+		t.Fatalf("expected ErrSameAccount for transfer, got %v", err)
+	}
+}
+
 func TestUpdateTransactionValidation(t *testing.T) {
 	expenseID, incomeID := int64(10), int64(11)
 	repository := &fakeMutationRepository{transactions: map[int64]Transaction{

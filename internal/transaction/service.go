@@ -133,12 +133,21 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateInput) (Tran
 	if id <= 0 {
 		return Transaction{}, ErrTransactionNotFound
 	}
-	if input.CategoryID == nil && input.Merchant == nil && input.Description == nil {
+	if input.CategoryID == nil && input.Merchant == nil && input.Description == nil && input.SourceAccountID == nil && input.DestinationAccountID == nil {
 		return Transaction{}, ErrNoUpdateFields
 	}
 	transaction, err := s.getTransaction(ctx, id)
 	if err != nil {
 		return Transaction{}, err
+	}
+	if input.SourceAccountID != nil {
+		transaction.SourceAccountID = input.SourceAccountID
+	}
+	if input.DestinationAccountID != nil {
+		transaction.DestinationAccountID = input.DestinationAccountID
+	}
+	if transaction.Type == "transfer" && transaction.SourceAccountID != nil && transaction.DestinationAccountID != nil && *transaction.SourceAccountID == *transaction.DestinationAccountID {
+		return Transaction{}, ErrSameAccount
 	}
 	if input.CategoryID != nil {
 		if transaction.Type == "transfer" {

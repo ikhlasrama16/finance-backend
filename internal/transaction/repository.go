@@ -101,10 +101,10 @@ func (r *Repository) Update(ctx context.Context, transaction Transaction) (Trans
 	var updated Transaction
 	err := r.db.QueryRow(ctx, `
 		UPDATE transactions
-		SET category_id = $2, merchant = $3, description = $4, updated_at = NOW()
+		SET source_account_id = $2, destination_account_id = $3, category_id = $4, merchant = $5, description = $6, updated_at = NOW()
 		WHERE id = $1
 		RETURNING `+transactionColumns+`
-	`, transaction.ID, transaction.CategoryID, transaction.Merchant, transaction.Description).Scan(scanTransaction(&updated)...)
+	`, transaction.ID, transaction.SourceAccountID, transaction.DestinationAccountID, transaction.CategoryID, transaction.Merchant, transaction.Description).Scan(scanTransaction(&updated)...)
 	if err != nil {
 		return Transaction{}, fmt.Errorf("update transaction: %w", err)
 	}
