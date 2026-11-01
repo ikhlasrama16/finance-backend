@@ -21,4 +21,29 @@ func TestRequireSessionProtectsAPIAndAllowsIngest(t *testing.T) {
 	if response.Code != http.StatusNoContent {
 		t.Fatalf("ingest status=%d", response.Code)
 	}
+
+	apiKeyProtected := RequireSessionOrAPIKey(service, "secret-key")(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+	bearerReq := httptest.NewRequest(http.MethodGet, "/api/v1/accounts", nil)
+	bearerReq.Header.Set("Authorization", "Bearer secret-key")
+	response = httptest.NewRecorder()
+	apiKeyProtected.ServeHTTP(response, bearerReq)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("bearer status=%d", response.Code)
+	}
+
+	headerKeyReq := httptest.NewRequest(http.MethodGet, "/api/v1/accounts", nil)
+	headerKeyReq.Header.Set("X-API-Key", "secret-key")
+	response = httptest.NewRecorder()
+	apiKeyProtected.ServeHTTP(response, headerKeyReq)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("x-api-key status=%d", response.Code)
+	}
+
+	invalidKeyReq := httptest.NewRequest(http.MethodGet, "/api/v1/accounts", nil)
+	invalidKeyReq.Header.Set("Authorization", "Bearer wrong-key")
+	response = httptest.NewRecorder()
+	apiKeyProtected.ServeHTTP(response, invalidKeyReq)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("invalid bearer status=%d", response.Code)
+	}
 }

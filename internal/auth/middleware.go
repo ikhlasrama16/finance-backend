@@ -1,11 +1,22 @@
 package auth
 
-import "net/http"
+import (
+	"net/http"
+	"strings"
+)
 
 func RequireSession(service *Service) func(http.Handler) http.Handler {
+	return RequireSessionOrAPIKey(service, "")
+}
+
+func RequireSessionOrAPIKey(service *Service, apiKey string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if isPublic(r) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if apiKey != "" && checkAPIKey(r, apiKey) {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -22,6 +33,19 @@ func RequireSession(service *Service) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r.WithContext(userContext(r.Context(), user)))
 		})
 	}
+}
+
+func checkAPIKey(r *http.Request, apiKey string) bool {
+	if auth := r.Header.Get("Authorization"); auth != "" {
+		parts := strings.SplitN(auth, " ", 2)
+		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") && parts[1] == apiKey {
+			return true
+		}
+	}
+	if headerKey := r.Header.Get("X-API-Key"); headerKey != "" && headerKey == apiKey {
+		return true
+	}
+	return false
 }
 
 func isPublic(r *http.Request) bool {

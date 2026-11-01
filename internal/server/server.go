@@ -154,7 +154,7 @@ func NewWithOptions(port string, db *pgxpool.Pool, options Options) *Server {
 	mux.Handle("POST /api/v1/notifications", notificationRoute)
 
 	development := options.AppEnv != "production"
-	var handler http.Handler = auth.RequireSession(authService)(mux)
+	var handler http.Handler = auth.RequireSessionOrAPIKey(authService, options.IngestAPIKey)(mux)
 	handler = middleware.CORS(options.CORSAllowedOrigins, development)(handler)
 
 	return &Server{
